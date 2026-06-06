@@ -30,6 +30,14 @@ function NavBar() {
       <Link to="/unblock-me" style={{ color: '#bcaaa4', textDecoration: 'none', fontSize: 14 }}>
         Unblock Me
       </Link>
+      <a
+        href={`${import.meta.env.BASE_URL}internals.html`}
+        target="_blank"
+        rel="noopener noreferrer"
+        style={{ color: '#bcaaa4', textDecoration: 'none', fontSize: 14, marginLeft: 'auto' }}
+      >
+        📖 How It Works
+      </a>
     </nav>
   )
 }

@@ -1,0 +1,1114 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Unblock Me — Game Internals</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --bg:        #0d1117;
+      --surface:   #161b22;
+      --surface2:  #21262d;
+      --border:    #30363d;
+      --text:      #e6edf3;
+      --muted:     #8b949e;
+      --accent:    #f78166;
+      --accent2:   #79c0ff;
+      --accent3:   #56d364;
+      --accent4:   #d2a8ff;
+      --yellow:    #e3b341;
+      --code-bg:   #0d1117;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    html { scroll-behavior: smooth; }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Inter', system-ui, sans-serif;
+      font-size: 15px;
+      line-height: 1.7;
+    }
+
+    /* ── Layout ────────────────────────────────────────────── */
+    .layout {
+      display: grid;
+      grid-template-columns: 260px 1fr;
+      min-height: 100vh;
+    }
+
+    /* ── Sidebar ───────────────────────────────────────────── */
+    aside {
+      background: var(--surface);
+      border-right: 1px solid var(--border);
+      padding: 28px 0;
+      position: sticky;
+      top: 0;
+      height: 100vh;
+      overflow-y: auto;
+    }
+
+    .sidebar-logo {
+      padding: 0 20px 24px;
+      border-bottom: 1px solid var(--border);
+      margin-bottom: 16px;
+    }
+
+    .sidebar-logo a {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      text-decoration: none;
+    }
+
+    .sidebar-logo .icon {
+      width: 32px; height: 32px;
+      background: linear-gradient(135deg, #d32f2f, #ff7043);
+      border-radius: 8px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 16px;
+      flex-shrink: 0;
+    }
+
+    .sidebar-logo h1 {
+      font-size: 14px;
+      font-weight: 700;
+      color: var(--text);
+      line-height: 1.2;
+    }
+
+    .sidebar-logo p {
+      font-size: 11px;
+      color: var(--muted);
+    }
+
+    nav ul { list-style: none; }
+
+    .nav-section {
+      padding: 6px 20px 4px;
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin-top: 8px;
+    }
+
+    nav li a {
+      display: block;
+      padding: 5px 20px 5px 28px;
+      font-size: 13px;
+      color: var(--muted);
+      text-decoration: none;
+      border-left: 2px solid transparent;
+      transition: color .15s, border-color .15s, background .15s;
+    }
+
+    nav li a:hover {
+      color: var(--text);
+      background: rgba(255,255,255,.04);
+    }
+
+    nav li a.active {
+      color: var(--accent2);
+      border-left-color: var(--accent2);
+      background: rgba(121,192,255,.07);
+    }
+
+    /* ── Main content ──────────────────────────────────────── */
+    main {
+      max-width: 900px;
+      padding: 48px 64px 96px;
+    }
+
+    section { margin-bottom: 80px; }
+
+    h2 {
+      font-size: 26px;
+      font-weight: 700;
+      color: var(--text);
+      margin-bottom: 4px;
+      padding-top: 8px;
+    }
+
+    .section-meta {
+      font-size: 12px;
+      color: var(--muted);
+      margin-bottom: 24px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .tag {
+      display: inline-block;
+      padding: 1px 8px;
+      border-radius: 20px;
+      font-size: 11px;
+      font-weight: 600;
+    }
+
+    .tag-engine  { background: rgba(247,129,102,.15); color: var(--accent); }
+    .tag-ui      { background: rgba(121,192,255,.15); color: var(--accent2); }
+    .tag-algo    { background: rgba(86,211,100,.15);  color: var(--accent3); }
+    .tag-data    { background: rgba(210,168,255,.15); color: var(--accent4); }
+    .tag-design  { background: rgba(227,179,65,.15);  color: var(--yellow); }
+
+    h3 {
+      font-size: 17px;
+      font-weight: 600;
+      color: var(--text);
+      margin: 28px 0 10px;
+    }
+
+    p { color: #c9d1d9; margin-bottom: 14px; }
+
+    a { color: var(--accent2); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+
+    /* ── Code blocks ───────────────────────────────────────── */
+    pre {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 20px 24px;
+      overflow-x: auto;
+      font-family: 'JetBrains Mono', 'Fira Code', monospace;
+      font-size: 13px;
+      line-height: 1.65;
+      margin: 16px 0;
+      position: relative;
+    }
+
+    pre .label {
+      position: absolute;
+      top: 10px; right: 14px;
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--muted);
+      font-family: 'Inter', sans-serif;
+    }
+
+    code { font-family: 'JetBrains Mono', monospace; font-size: .9em; }
+    p code, li code {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      padding: 1px 6px;
+      border-radius: 4px;
+      color: var(--accent2);
+    }
+
+    /* syntax highlight */
+    .kw  { color: #ff7b72; }
+    .ty  { color: #79c0ff; }
+    .fn  { color: #d2a8ff; }
+    .str { color: #a5d6ff; }
+    .num { color: #79c0ff; }
+    .cm  { color: #8b949e; font-style: italic; }
+    .op  { color: #ff7b72; }
+    .id  { color: #e6edf3; }
+
+    /* ── Diagrams ──────────────────────────────────────────── */
+    .diagram {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 24px 28px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 13px;
+      line-height: 1.7;
+      margin: 16px 0;
+      overflow-x: auto;
+      white-space: pre;
+    }
+
+    /* ── Grid visual ───────────────────────────────────────── */
+    .grid-demo {
+      display: inline-grid;
+      grid-template-columns: repeat(6, 40px);
+      grid-template-rows: repeat(6, 40px);
+      gap: 4px;
+      background: #5d4037;
+      padding: 10px;
+      border-radius: 10px;
+      margin: 16px 0;
+    }
+
+    .cell {
+      width: 40px; height: 40px;
+      background: rgba(0,0,0,.15);
+      border-radius: 3px;
+      display: flex; align-items: center; justify-content: center;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 11px;
+      color: rgba(255,255,255,.4);
+    }
+
+    .cell.target { background: #d32f2f; color: #fff; font-weight: 700; font-size: 12px; border-radius: 3px; }
+    .cell.blocker { background: #e65100; color: #fff; font-weight: 600; font-size: 11px; border-radius: 3px; }
+
+    /* ── Callout boxes ─────────────────────────────────────── */
+    .callout {
+      border-left: 3px solid;
+      padding: 14px 18px;
+      border-radius: 0 8px 8px 0;
+      margin: 16px 0;
+    }
+
+    .callout-info  { border-color: var(--accent2); background: rgba(121,192,255,.07); }
+    .callout-tip   { border-color: var(--accent3); background: rgba(86,211,100,.07); }
+    .callout-warn  { border-color: var(--yellow);  background: rgba(227,179,65,.07); }
+
+    .callout strong { display: block; margin-bottom: 4px; font-size: 13px; }
+    .callout-info  strong { color: var(--accent2); }
+    .callout-tip   strong { color: var(--accent3); }
+    .callout-warn  strong { color: var(--yellow); }
+
+    /* ── Tables ────────────────────────────────────────────── */
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 14px;
+      margin: 16px 0;
+    }
+
+    th {
+      background: var(--surface2);
+      padding: 10px 14px;
+      text-align: left;
+      font-weight: 600;
+      font-size: 12px;
+      letter-spacing: .04em;
+      color: var(--muted);
+      border-bottom: 1px solid var(--border);
+    }
+
+    td {
+      padding: 10px 14px;
+      border-bottom: 1px solid var(--border);
+      vertical-align: top;
+    }
+
+    tr:last-child td { border-bottom: none; }
+    tr:hover td { background: rgba(255,255,255,.02); }
+
+    td:first-child code { color: var(--accent4); }
+
+    /* ── Step list ─────────────────────────────────────────── */
+    .steps {
+      counter-reset: step;
+      list-style: none;
+      margin: 16px 0;
+    }
+
+    .steps li {
+      counter-increment: step;
+      display: flex;
+      gap: 16px;
+      margin-bottom: 12px;
+    }
+
+    .steps li::before {
+      content: counter(step);
+      flex-shrink: 0;
+      width: 28px; height: 28px;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 12px;
+      font-weight: 700;
+      color: var(--accent2);
+      margin-top: 2px;
+    }
+
+    /* ── Flow diagram ──────────────────────────────────────── */
+    .flow {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 8px;
+      margin: 16px 0;
+      font-size: 13px;
+    }
+
+    .flow-box {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 8px 14px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 12px;
+    }
+
+    .flow-arrow { color: var(--muted); font-size: 18px; }
+
+    /* ── Hero ──────────────────────────────────────────────── */
+    .hero {
+      background: linear-gradient(135deg, rgba(211,47,47,.12), rgba(121,192,255,.08));
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 36px 40px;
+      margin-bottom: 56px;
+    }
+
+    .hero h1 {
+      font-size: 36px;
+      font-weight: 800;
+      background: linear-gradient(135deg, #f78166, #79c0ff);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+      margin-bottom: 10px;
+      line-height: 1.2;
+    }
+
+    .hero p { font-size: 16px; color: var(--muted); margin: 0; }
+
+    .hero-chips {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 18px;
+    }
+
+    .chip {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 4px 12px;
+      font-size: 12px;
+      color: var(--muted);
+      font-family: 'JetBrains Mono', monospace;
+    }
+
+    /* ── Responsive ────────────────────────────────────────── */
+    @media (max-width: 820px) {
+      .layout { grid-template-columns: 1fr; }
+      aside { position: static; height: auto; border-right: none; border-bottom: 1px solid var(--border); }
+      main { padding: 32px 24px 80px; }
+    }
+  </style>
+</head>
+<body>
+<div class="layout">
+
+<!-- ══════════════════════════════ SIDEBAR ══════════════════════════════ -->
+<aside>
+  <div class="sidebar-logo">
+    <a href="/#/unblock-me">
+      <div class="icon">🧩</div>
+      <div>
+        <h1>Unblock Me</h1>
+        <p>Game Internals</p>
+      </div>
+    </a>
+  </div>
+  <nav>
+    <div class="nav-section">Overview</div>
+    <ul>
+      <li><a href="#overview">Introduction</a></li>
+      <li><a href="#stack">Tech Stack</a></li>
+      <li><a href="#architecture">Architecture</a></li>
+    </ul>
+
+    <div class="nav-section">Data Model</div>
+    <ul>
+      <li><a href="#types">Type Definitions</a></li>
+      <li><a href="#grid">The Grid (Occupancy)</a></li>
+      <li><a href="#levels">Level Design</a></li>
+    </ul>
+
+    <div class="nav-section">Game Engine</div>
+    <ul>
+      <li><a href="#movement">Block Movement</a></li>
+      <li><a href="#win">Win Condition</a></li>
+      <li><a href="#state">Immutable State</a></li>
+    </ul>
+
+    <div class="nav-section">React UI</div>
+    <ul>
+      <li><a href="#reducer">useReducer Pattern</a></li>
+      <li><a href="#drag">Drag System (RAF)</a></li>
+      <li><a href="#inputs">Input Methods</a></li>
+      <li><a href="#render">Rendering</a></li>
+    </ul>
+
+    <div class="nav-section">Algorithms</div>
+    <ul>
+      <li><a href="#solver">BFS vs DFS Solver</a></li>
+      <li><a href="#hashing">State Hashing</a></li>
+      <li><a href="#complexity">Complexity</a></li>
+    </ul>
+
+    <div class="nav-section">Testing</div>
+    <ul>
+      <li><a href="#testing">Test Strategy</a></li>
+    </ul>
+  </nav>
+</aside>
+
+<!-- ══════════════════════════════ MAIN ══════════════════════════════ -->
+<main>
+
+  <div class="hero">
+    <h1>Unblock Me — Game Internals</h1>
+    <p>A deep dive into how a browser puzzle game is built: data structures, movement algorithms, drag interactions, and graph-search solvers — written for CS students who want to understand the code.</p>
+    <div class="hero-chips">
+      <span class="chip">React 19</span>
+      <span class="chip">TypeScript</span>
+      <span class="chip">Vite</span>
+      <span class="chip">Vitest</span>
+      <span class="chip">BFS / DFS</span>
+      <span class="chip">Pointer Events API</span>
+      <span class="chip">requestAnimationFrame</span>
+    </div>
+  </div>
+
+  <!-- ── OVERVIEW ──────────────────────────────────────────────────── -->
+  <section id="overview">
+    <h2>Introduction</h2>
+    <div class="section-meta"><span class="tag tag-design">Game Design</span></div>
+
+    <p><strong>Unblock Me</strong> (also known as Rush Hour) is a sliding-block puzzle. The board is a 6×6 grid. One special <em>target block</em> (the red one) must slide out through an exit hole on the right wall. Other blocks obstruct the path — the player must slide them out of the way.</p>
+
+    <p>Rules are simple:</p>
+    <ul style="margin: 0 0 14px 20px; color: #c9d1d9;">
+      <li>Horizontal blocks slide <strong>left / right only</strong>.</li>
+      <li>Vertical blocks slide <strong>up / down only</strong>.</li>
+      <li>No block can pass through another.</li>
+      <li>The puzzle is solved when the target block exits the right edge.</li>
+    </ul>
+
+    <p>Despite these simple rules, the state space is large enough that many puzzles require careful planning — and a computer solver needs a proper graph-search algorithm to find the solution.</p>
+
+    <h3>Why this is interesting for CS students</h3>
+    <p>Building this game touches several core CS topics in one small, self-contained project:</p>
+    <table>
+      <tr><th>Topic</th><th>Where it appears</th></tr>
+      <tr><td><code>2D arrays</code></td><td>Occupancy grid, collision detection</td></tr>
+      <tr><td><code>Immutable data</code></td><td>Every move creates a new state object</td></tr>
+      <tr><td><code>Graph search</code></td><td>BFS / DFS solver over the state space</td></tr>
+      <tr><td><code>State hashing</code></td><td>Canonical string key for visited-set deduplication</td></tr>
+      <tr><td><code>Event handling</code></td><td>Pointer Events API + requestAnimationFrame</td></tr>
+      <tr><td><code>Reducer pattern</code></td><td>Predictable, testable state transitions</td></tr>
+      <tr><td><code>Memoization</code></td><td>React.memo + useMemo to avoid redundant work</td></tr>
+    </table>
+  </section>
+
+  <!-- ── STACK ─────────────────────────────────────────────────────── -->
+  <section id="stack">
+    <h2>Tech Stack</h2>
+    <div class="section-meta"><span class="tag tag-design">Setup</span></div>
+
+    <table>
+      <tr><th>Tool</th><th>Role</th></tr>
+      <tr><td><code>React 19</code></td><td>Component model, hooks (useState, useReducer, useCallback, useMemo, useRef)</td></tr>
+      <tr><td><code>TypeScript</code></td><td>Strict typing catches shape mismatches at compile time</td></tr>
+      <tr><td><code>Vite</code></td><td>Dev server with HMR; bundles for production</td></tr>
+      <tr><td><code>Vitest</code></td><td>Unit tests for the pure engine and solver functions</td></tr>
+      <tr><td><code>React Router 7</code></td><td>Client-side routing; HashRouter for GitHub Pages compatibility</td></tr>
+    </table>
+
+    <p>There is <strong>no external CSS framework</strong>. All layout is done with inline styles and a single global CSS file. This keeps the dependency count minimal and makes the layout code easier to trace.</p>
+  </section>
+
+  <!-- ── ARCHITECTURE ──────────────────────────────────────────────── -->
+  <section id="architecture">
+    <h2>Architecture</h2>
+    <div class="section-meta"><span class="tag tag-design">Design</span></div>
+
+    <p>The project follows a strict separation of concerns. Pure functions live in <code>engine.ts</code> and <code>solver.ts</code> — they never touch React. React components handle only rendering and user input.</p>
+
+<div class="diagram">src/
+├── App.tsx                    ← Router + NavBar
+├── pages/
+│   └── HomePage.tsx           ← Game selection landing page
+└── games/
+    └── unblock-me/
+        ├── types.ts           ← TypeScript interfaces (data shapes)
+        ├── engine.ts          ← Pure game logic (no React, no DOM)
+        ├── solver.ts          ← BFS / DFS solver (no React, no DOM)
+        ├── levels.ts          ← 10 handcrafted puzzle definitions
+        ├── UnblockMe.tsx      ← Top-level game page (useReducer)
+        └── components/
+            ├── Grid.tsx       ← Board rendering + all input handling
+            ├── SolverPanel.tsx← Algorithm selector + "Solve" button
+            └── HowToPlay.tsx  ← Instructions modal</div>
+
+    <p>The data flow is unidirectional:</p>
+    <div class="flow">
+      <div class="flow-box">User Input</div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-box">Grid.tsx callback</div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-box">dispatch(MOVE)</div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-box">engine.applyMove()</div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-box">new GameState</div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-box">React re-render</div>
+    </div>
+  </section>
+
+  <!-- ── TYPES ─────────────────────────────────────────────────────── -->
+  <section id="types">
+    <h2>Type Definitions</h2>
+    <div class="section-meta"><span class="tag tag-data">types.ts</span></div>
+
+    <p>Everything the game needs to represent a puzzle state lives in three interfaces. Notice there are no methods — just plain data. This is deliberate: pure data is trivially serialisable, comparable, and copyable.</p>
+
+<pre><span class="cm">// types.ts</span>
+<span class="kw">export type</span> <span class="ty">Direction</span> = <span class="str">'horizontal'</span> | <span class="str">'vertical'</span>
+
+<span class="kw">export interface</span> <span class="ty">Block</span> {
+  id:        <span class="ty">string</span>      <span class="cm">// unique id, e.g. 'target', 'vA', 'hB'</span>
+  row:       <span class="ty">number</span>      <span class="cm">// top-left row (0-indexed)</span>
+  col:       <span class="ty">number</span>      <span class="cm">// top-left col (0-indexed)</span>
+  length:    <span class="ty">number</span>      <span class="cm">// cells occupied (always ≥ 2)</span>
+  direction: <span class="ty">Direction</span>
+  isTarget:  <span class="ty">boolean</span>     <span class="cm">// true for the red block</span>
+}
+
+<span class="kw">export interface</span> <span class="ty">GameState</span> {
+  gridSize: <span class="ty">number</span>       <span class="cm">// always 6 in this game</span>
+  blocks:   <span class="ty">Block</span>[]
+  exitRow:  <span class="ty">number</span>       <span class="cm">// row where the target must reach the right edge</span>
+  moves:    <span class="ty">number</span>       <span class="cm">// move counter</span>
+  won:      <span class="ty">boolean</span>
+}
+
+<span class="kw">export interface</span> <span class="ty">MoveAction</span> {
+  blockId: <span class="ty">string</span>        <span class="cm">// which block to move</span>
+  delta:   <span class="ty">number</span>        <span class="cm">// positive = right/down; negative = left/up</span>
+}</pre>
+
+    <h3>Coordinate System</h3>
+    <p>Row and col are both 0-indexed, measured from the top-left. A horizontal block at <code>{row:2, col:1, length:3}</code> occupies cells (2,1), (2,2), (2,3).</p>
+
+<div class="diagram">     col 0  col 1  col 2  col 3  col 4  col 5
+row 0  [ ]    [ ]    [ ]    [ ]    [ ]    [ ]
+row 1  [ ]    [ ]    [ ]    [ ]    [ ]    [ ]
+row 2  [ ]   [■■■■■■■■■■■■■■]    [ ]    [ ]     ← length-3 horizontal block
+row 3  [ ]    [ ]    [ ]    [ ]    [ ]    [ ]
+row 4  [ ]    [ ]    [ ]    [ ]    [ ]    [ ]
+row 5  [ ]    [ ]    [ ]    [ ]    [ ]    [ ]</div>
+  </section>
+
+  <!-- ── GRID ──────────────────────────────────────────────────────── -->
+  <section id="grid">
+    <h2>The Grid — Occupancy Map</h2>
+    <div class="section-meta"><span class="tag tag-engine">engine.ts</span> · <code>buildOccupancy()</code></div>
+
+    <p>The <code>GameState</code> only stores the <em>list of blocks</em>. It does not store which cells are free or occupied. To answer "is cell (r, c) taken?" the engine builds a 2D lookup table on demand — the <strong>occupancy map</strong>.</p>
+
+<pre><span class="kw">function</span> <span class="fn">buildOccupancy</span>(state: <span class="ty">GameState</span>): (<span class="ty">string</span> | <span class="ty">null</span>)[][] {
+  <span class="cm">// Create a gridSize × gridSize matrix, all null</span>
+  <span class="kw">const</span> grid = <span class="ty">Array</span>.<span class="fn">from</span>({ length: state.gridSize }, () =>
+    <span class="ty">Array</span>(state.gridSize).<span class="fn">fill</span>(<span class="kw">null</span>)
+  )
+
+  <span class="kw">for</span> (<span class="kw">const</span> block <span class="kw">of</span> state.blocks) {
+    <span class="kw">for</span> (<span class="kw">let</span> i = <span class="num">0</span>; i &lt; block.length; i++) {
+      <span class="cm">// For vertical blocks: advance down rows; for horizontal: advance across cols</span>
+      <span class="kw">const</span> r = block.direction === <span class="str">'vertical'</span>   ? block.row + i : block.row
+      <span class="kw">const</span> c = block.direction === <span class="str">'horizontal'</span> ? block.col + i : block.col
+      grid[r][c] = block.id   <span class="cm">// mark cell with the block's id</span>
+    }
+  }
+  <span class="kw">return</span> grid
+}</pre>
+
+    <div class="callout callout-info">
+      <strong>Why a 2D array and not a Set?</strong>
+      A 2D array gives O(1) cell lookup — <code>grid[r][c]</code>. A Set of strings like <code>"2,3"</code> would be O(1) average too, but indexing an array is faster in practice because there's no string allocation or hash computation on every access.
+    </div>
+
+    <h3>Visual example — Level 1</h3>
+    <p>After calling <code>buildOccupancy</code> on Level 1, the grid looks like this. Each cell contains either <code>null</code> (empty) or the block id occupying it.</p>
+
+<div class="diagram">         col 0    col 1    col 2    col 3    col 4    col 5
+row 0  [  null ] [  null ] [  "h0" ] [  "h0" ] [  "h0" ] [  null ]
+row 1  [  null ] [  null ] [  "vA" ] [  null ] [  null ] [  null ]
+row 2  ["target"]["target"][  null ] [  null ] [  "vB" ] [  null ]
+row 3  [  "vD" ] [  null ] [  null ] [  null ] [  "vB" ] [  null ]
+row 4  [  "vD" ] [  "hC" ] [  "hC" ] [  null ] [  null ] [  null ]
+row 5  [  "vD" ] [  null ] [  "h5" ] [  "h5" ] [  "h5" ] [  null ]</div>
+
+    <p>The target block (red) is at row 2, cols 0–1. To exit right, it needs cols 2, 3, 4, 5 to be free. Currently vA blocks col 2, and vB blocks col 4.</p>
+  </section>
+
+  <!-- ── LEVELS ────────────────────────────────────────────────────── -->
+  <section id="levels">
+    <h2>Level Design</h2>
+    <div class="section-meta"><span class="tag tag-design">levels.ts</span></div>
+
+    <p>Each level is a <code>GameState</code> snapshot defined as a plain object. A tiny helper function avoids repeating the fixed fields:</p>
+
+<pre><span class="kw">function</span> <span class="fn">level</span>(exitRow: <span class="ty">number</span>, blocks: <span class="ty">Block</span>[]): <span class="ty">GameState</span> {
+  <span class="kw">return</span> { gridSize: <span class="num">6</span>, exitRow, moves: <span class="num">0</span>, won: <span class="kw">false</span>, blocks }
+}
+
+<span class="cm">// Level 1 — 3 moves to solve</span>
+<span class="kw">export const</span> LEVEL_1 = <span class="fn">level</span>(<span class="num">2</span>, [
+  { id: <span class="str">'target'</span>, row: <span class="num">2</span>, col: <span class="num">0</span>, length: <span class="num">2</span>, direction: <span class="str">'horizontal'</span>, isTarget: <span class="kw">true</span>  },
+  { id: <span class="str">'vA'</span>,     row: <span class="num">1</span>, col: <span class="num">2</span>, length: <span class="num">2</span>, direction: <span class="str">'vertical'</span>,   isTarget: <span class="kw">false</span> },
+  { id: <span class="str">'vB'</span>,     row: <span class="num">2</span>, col: <span class="num">4</span>, length: <span class="num">2</span>, direction: <span class="str">'vertical'</span>,   isTarget: <span class="kw">false</span> },
+  <span class="cm">// … more blocks …</span>
+])</pre>
+
+    <p>Levels 1–10 are progressively harder. The key design dimension is <strong>dependency depth</strong> — how many "chain" moves are needed before you can clear the path:</p>
+
+    <table>
+      <tr><th>Levels</th><th>Optimal Moves</th><th>Pattern</th></tr>
+      <tr><td>1–2</td><td>3</td><td>Independent single blockers — each moves freely</td></tr>
+      <tr><td>3–4</td><td>4–5</td><td>One-level chain — block A blocks blocker B</td></tr>
+      <tr><td>5–7</td><td>5–6</td><td>Two-chain puzzles, non-obvious exit row</td></tr>
+      <tr><td>8–10</td><td>6–7</td><td>Interleaved chains, multiple sub-puzzles</td></tr>
+    </table>
+
+    <div class="callout callout-tip">
+      <strong>Design tip</strong>
+      Every level in <code>levels.ts</code> has a comment above it showing the exact solution path (e.g. <em>vA↑1, vB↓1, target→4</em>). When you add new levels, write the solution first, then place the blocks to create it — this is much easier than placing blocks randomly and hoping a solution exists.
+    </div>
+
+    <p>All 10 levels are automatically validated by <code>levels.test.ts</code>: it checks that no two blocks overlap and that BFS can solve every level.</p>
+  </section>
+
+  <!-- ── MOVEMENT ──────────────────────────────────────────────────── -->
+  <section id="movement">
+    <h2>Block Movement Algorithm</h2>
+    <div class="section-meta"><span class="tag tag-engine">engine.ts</span> · <code>getMovableRange()</code> · <code>applyMove()</code></div>
+
+    <h3>Step 1 — getMovableRange()</h3>
+    <p>Before applying any move, the engine calculates how far a block <em>can</em> travel in each direction. It scans outward from the block's edges, counting free cells until it hits a wall or another block.</p>
+
+<pre><span class="kw">function</span> <span class="fn">getMovableRange</span>(block: <span class="ty">Block</span>, state: <span class="ty">GameState</span>): { min: <span class="ty">number</span>; max: <span class="ty">number</span> } {
+  <span class="kw">const</span> grid = <span class="fn">buildOccupancy</span>(state)
+  <span class="kw">let</span> min = <span class="num">0</span>, max = <span class="num">0</span>
+
+  <span class="kw">if</span> (block.direction === <span class="str">'horizontal'</span>) {
+    <span class="cm">// Scan LEFT from left edge</span>
+    <span class="kw">let</span> c = block.col - <span class="num">1</span>
+    <span class="kw">while</span> (c >= <span class="num">0</span> && grid[block.row][c] === <span class="kw">null</span>) { min--; c-- }
+
+    <span class="cm">// Scan RIGHT from right edge</span>
+    c = block.col + block.length
+    <span class="kw">while</span> (c &lt; state.gridSize && grid[block.row][c] === <span class="kw">null</span>) { max++; c++ }
+  } <span class="kw">else</span> {
+    <span class="cm">// Vertical: scan UP and DOWN</span>
+    <span class="kw">let</span> r = block.row - <span class="num">1</span>
+    <span class="kw">while</span> (r >= <span class="num">0</span> && grid[r][block.col] === <span class="kw">null</span>) { min--; r-- }
+    r = block.row + block.length
+    <span class="kw">while</span> (r &lt; state.gridSize && grid[r][block.col] === <span class="kw">null</span>) { max++; r++ }
+  }
+
+  <span class="kw">return</span> { min, max }   <span class="cm">// e.g. { min: -2, max: 1 }</span>
+}</pre>
+
+    <p>For example: a vertical block at rows 1–2 in a column with free cells at row 0 (above) and rows 3–4 (below) returns <code>{ min: -1, max: 2 }</code>.</p>
+
+    <h3>Step 2 — applyMove()</h3>
+    <p>Once we know the legal range, <code>applyMove</code> clamps the requested delta and creates a <strong>new</strong> state object. It never mutates the old one.</p>
+
+<pre><span class="kw">function</span> <span class="fn">applyMove</span>(state: <span class="ty">GameState</span>, action: <span class="ty">MoveAction</span>): <span class="ty">GameState</span> {
+  <span class="kw">const</span> block = state.blocks.<span class="fn">find</span>(b => b.id === action.blockId)
+  <span class="kw">if</span> (!block) <span class="kw">return</span> state
+
+  <span class="kw">const</span> { min, max } = <span class="fn">getMovableRange</span>(block, state)
+  <span class="kw">const</span> clampedDelta = <span class="ty">Math</span>.<span class="fn">max</span>(min, <span class="ty">Math</span>.<span class="fn">min</span>(max, action.delta))
+  <span class="kw">if</span> (clampedDelta === <span class="num">0</span>) <span class="kw">return</span> state        <span class="cm">// no-op</span>
+
+  <span class="cm">// Map over blocks — only the moved block gets new coordinates</span>
+  <span class="kw">const</span> newBlocks = state.blocks.<span class="fn">map</span>(b => {
+    <span class="kw">if</span> (b.id !== action.blockId) <span class="kw">return</span> b
+    <span class="kw">return</span> {
+      ...b,
+      row: b.direction === <span class="str">'vertical'</span>   ? b.row + clampedDelta : b.row,
+      col: b.direction === <span class="str">'horizontal'</span> ? b.col + clampedDelta : b.col,
+    }
+  })
+
+  <span class="cm">// Check win: target's right edge has cleared the board</span>
+  <span class="kw">const</span> target = newBlocks.<span class="fn">find</span>(b => b.isTarget)!
+  <span class="kw">const</span> won = target.direction === <span class="str">'horizontal'</span>
+    && target.col + target.length >= state.gridSize
+
+  <span class="kw">return</span> { ...state, blocks: newBlocks, moves: state.moves + <span class="num">1</span>, won }
+}</pre>
+
+    <div class="callout callout-warn">
+      <strong>Clamping is a safety net, not the primary guard</strong>
+      The UI already constrains drag and click to legal positions before calling <code>onMove</code>. The clamp inside <code>applyMove</code> is a second line of defence — it makes the engine safe to call from the solver or tests without trusting the caller.
+    </div>
+  </section>
+
+  <!-- ── WIN ───────────────────────────────────────────────────────── -->
+  <section id="win">
+    <h2>Win Condition</h2>
+    <div class="section-meta"><span class="tag tag-engine">engine.ts</span></div>
+
+    <p>The win check is a single boolean expression evaluated after every move:</p>
+
+<pre><span class="kw">const</span> won = target.direction === <span class="str">'horizontal'</span>
+          && target.col + target.length >= state.gridSize
+<span class="cm">// Example: col=4, length=2, gridSize=6 → 4+2=6 ≥ 6 → won!</span></pre>
+
+    <p>The target block "exits" as soon as its right edge reaches or passes column 6 (the wall). There's no special exit animation state — the won flag in <code>GameState</code> is enough for the UI to show the win banner.</p>
+
+    <div class="diagram">Col:  0    1    2    3    4    5   (wall)
+     [ ]  [ ]  [ ]  [ ] [■■■■■■] → ✓ won  ← target at col 4, length 2
+     [ ]  [ ]  [ ]  [ ]  [ ]  [■■] → ✓ won  ← col 5, length 2
+     [ ]  [ ]  [ ]  [■■■■■] [ ]    →  —      ← col 3, length 2: 3+2=5 &lt; 6</div>
+  </section>
+
+  <!-- ── STATE ─────────────────────────────────────────────────────── -->
+  <section id="state">
+    <h2>Immutable State</h2>
+    <div class="section-meta"><span class="tag tag-engine">Functional Core</span></div>
+
+    <p>Every function in <code>engine.ts</code> is <strong>pure</strong>: given the same inputs, it always returns the same output, and it never modifies its arguments. This pattern — sometimes called a "functional core, imperative shell" — has concrete engineering benefits:</p>
+
+    <table>
+      <tr><th>Benefit</th><th>How it helps</th></tr>
+      <tr><td>Testability</td><td>Call the function directly in a test — no mocking, no setup</td></tr>
+      <tr><td>Time travel</td><td>Keep a stack of states → free undo support</td></tr>
+      <tr><td>Concurrency-safe</td><td>No shared mutable state → no race conditions</td></tr>
+      <tr><td>Solver-friendly</td><td>The BFS solver can call applyMove in a tight loop without side effects</td></tr>
+    </table>
+
+    <p>Immutability in practice: the spread operator (<code>{ ...state, blocks: newBlocks }</code>) creates a shallow copy. Since blocks is an array of simple objects with no nested references, a shallow copy is sufficient.</p>
+  </section>
+
+  <!-- ── REDUCER ───────────────────────────────────────────────────── -->
+  <section id="reducer">
+    <h2>useReducer Pattern</h2>
+    <div class="section-meta"><span class="tag tag-ui">UnblockMe.tsx</span></div>
+
+    <p>The top-level game page manages state with React's <code>useReducer</code> hook. A reducer is a function <code>(state, action) → newState</code> — the same pattern used by Redux, but built into React with no extra library.</p>
+
+<pre><span class="kw">type</span> <span class="ty">Action</span> =
+  | { type: <span class="str">'LOAD_LEVEL'</span>;   index: <span class="ty">number</span> }
+  | { type: <span class="str">'MOVE'</span>;         action: <span class="ty">MoveAction</span> }
+  | { type: <span class="str">'SELECT'</span>;       id: <span class="ty">string</span> | <span class="kw">null</span> }
+  | { type: <span class="str">'SET_STATE'</span>;    state: <span class="ty">GameState</span> }  <span class="cm">// used during solver animation</span>
+
+<span class="kw">function</span> <span class="fn">reducer</span>(page: <span class="ty">GamePageState</span>, action: <span class="ty">Action</span>): <span class="ty">GamePageState</span> {
+  <span class="kw">switch</span> (action.type) {
+    <span class="kw">case</span> <span class="str">'LOAD_LEVEL'</span>: <span class="kw">return</span> {
+      levelIndex: action.index,
+      state: LEVELS[action.index],
+      selectedBlockId: <span class="kw">null</span>,
+    }
+    <span class="kw">case</span> <span class="str">'MOVE'</span>: <span class="kw">return</span> {
+      ...page,
+      state: <span class="fn">applyMove</span>(page.state, action.action),
+      selectedBlockId: <span class="kw">null</span>,
+    }
+    <span class="kw">case</span> <span class="str">'SELECT'</span>: <span class="kw">return</span> { ...page, selectedBlockId: action.id }
+    <span class="kw">case</span> <span class="str">'SET_STATE'</span>: <span class="kw">return</span> { ...page, state: action.state }
+    <span class="kw">default</span>: <span class="kw">return</span> page
+  }
+}</pre>
+
+    <div class="callout callout-tip">
+      <strong>Why useReducer instead of useState?</strong>
+      When multiple pieces of state always change together (level index + game state + selection), a reducer bundles them into one atomic update. It also makes every state transition explicit and named — much easier to reason about and test than scattered <code>setState</code> calls.
+    </div>
+  </section>
+
+  <!-- ── DRAG ──────────────────────────────────────────────────────── -->
+  <section id="drag">
+    <h2>Drag System with requestAnimationFrame</h2>
+    <div class="section-meta"><span class="tag tag-ui">Grid.tsx</span> · Pointer Events API</div>
+
+    <p>Dragging a block involves three events: <code>pointerdown</code>, <code>pointermove</code>, and <code>pointerup</code>. The key challenge is making it feel smooth without causing excessive React re-renders (which would stutter on every pixel moved).</p>
+
+    <h3>The approach: decouple visual state from committed state</h3>
+
+    <ol class="steps">
+      <li><strong>pointerdown</strong> — Record the drag start position, compute <code>{ min, max }</code> once via <code>getMovableRange</code>, store everything in a <code>useRef</code> (no re-render).</li>
+      <li><strong>pointermove</strong> — Calculate the raw pixel delta, convert to cell delta, clamp to legal range. If the cell delta changed, schedule a <code>requestAnimationFrame</code> to update visual state. Skip if a frame is already queued.</li>
+      <li><strong>pointerup</strong> — Cancel any pending frame, commit the final delta by calling <code>onMove</code> (which dispatches to the reducer).</li>
+    </ol>
+
+<pre><span class="kw">const</span> handlePointerMove = <span class="fn">useCallback</span>((e: <span class="ty">React.PointerEvent</span>) => {
+  <span class="kw">if</span> (!dragRef.current) <span class="kw">return</span>
+  <span class="kw">const</span> ds = dragRef.current
+  <span class="kw">const</span> block = blockMap.<span class="fn">get</span>(ds.blockId)
+  <span class="kw">if</span> (!block) <span class="kw">return</span>
+
+  <span class="cm">// Convert pixel offset → cell delta</span>
+  <span class="kw">const</span> rawPx = block.direction === <span class="str">'horizontal'</span>
+    ? e.clientX - ds.startX : e.clientY - ds.startY
+  <span class="kw">const</span> rawDelta = <span class="ty">Math</span>.<span class="fn">round</span>(rawPx / (cellSize + GAP))
+  <span class="kw">const</span> clamped = <span class="ty">Math</span>.<span class="fn">max</span>(ds.min, <span class="ty">Math</span>.<span class="fn">min</span>(ds.max, rawDelta))
+
+  <span class="kw">if</span> (clamped === ds.currentDelta) <span class="kw">return</span>   <span class="cm">// cell unchanged, skip</span>
+  ds.currentDelta = clamped
+
+  <span class="cm">// Throttle React re-renders to animation frames (≤ 60 per second)</span>
+  <span class="kw">if</span> (rafRef.current !== <span class="kw">null</span>) <span class="kw">return</span>       <span class="cm">// frame already queued</span>
+  rafRef.current = <span class="fn">requestAnimationFrame</span>(() => {
+    rafRef.current = <span class="kw">null</span>
+    <span class="kw">if</span> (dragRef.current)
+      <span class="fn">setDragVisual</span>({ blockId: dragRef.current.blockId, delta: dragRef.current.currentDelta })
+  })
+}, [blockMap, cellSize])</pre>
+
+    <div class="callout callout-info">
+      <strong>requestAnimationFrame (RAF) throttling</strong>
+      <code>pointermove</code> can fire hundreds of times per second. RAF ensures we only update React state at most once per screen refresh (~60 Hz). This is a standard technique for smooth, non-janky drag interactions. The <em>latest</em> delta is always committed because <code>dragRef.current.currentDelta</code> is updated synchronously — the RAF closure captures the ref, not a stale value.
+    </div>
+
+    <h3>Pointer Capture</h3>
+    <p>On <code>pointerdown</code>, the code calls <code>element.setPointerCapture(e.pointerId)</code>. This makes the element receive all future pointer events even if the cursor leaves its bounds — essential for smooth drag-outside-the-grid behaviour.</p>
+  </section>
+
+  <!-- ── INPUTS ────────────────────────────────────────────────────── -->
+  <section id="inputs">
+    <h2>Input Methods</h2>
+    <div class="section-meta"><span class="tag tag-ui">Grid.tsx</span></div>
+
+    <p>Three independent input methods are implemented, all converging on the same <code>onMove(action)</code> callback:</p>
+
+    <table>
+      <tr><th>Method</th><th>How it works</th></tr>
+      <tr>
+        <td><code>Drag</code></td>
+        <td>Pointer events (works on touch and mouse). Snap-to-grid: visual is continuous, commit is discrete cells.</td>
+      </tr>
+      <tr>
+        <td><code>Click-to-move</code></td>
+        <td>Click a block to select it (highlights orange). Click anywhere on the grid to move it to that position. Delta = clicked cell − block's anchor cell, clamped to legal range.</td>
+      </tr>
+      <tr>
+        <td><code>Arrow keys</code></td>
+        <td>When a block is selected, arrow keys move it by 1 cell. Only the axis matching the block's direction is processed (e.g. Left/Right for horizontal blocks).</td>
+      </tr>
+    </table>
+
+<pre><span class="cm">// Click-to-move: calculate delta from click position</span>
+<span class="kw">function</span> <span class="fn">handleGridClick</span>(e: <span class="ty">React.MouseEvent&lt;HTMLDivElement&gt;</span>) {
+  <span class="kw">if</span> (!selectedBlockId) <span class="kw">return</span>
+  <span class="kw">const</span> rect = e.currentTarget.<span class="fn">getBoundingClientRect</span>()
+  <span class="kw">const</span> x = e.clientX - rect.left - PADDING
+  <span class="kw">const</span> y = e.clientY - rect.top  - PADDING
+  <span class="kw">const</span> clickCol = <span class="ty">Math</span>.<span class="fn">floor</span>(x / (cellSize + GAP))
+  <span class="kw">const</span> clickRow = <span class="ty">Math</span>.<span class="fn">floor</span>(y / (cellSize + GAP))
+  <span class="kw">let</span> delta = block.direction === <span class="str">'horizontal'</span>
+    ? clickCol - block.col : clickRow - block.row
+  <span class="kw">const</span> clamped = <span class="ty">Math</span>.<span class="fn">max</span>(min, <span class="ty">Math</span>.<span class="fn">min</span>(max, delta))
+  <span class="kw">if</span> (clamped !== <span class="num">0</span>) <span class="fn">onMove</span>({ blockId: selectedBlockId, delta: clamped })
+}</pre>
+  </section>
+
+  <!-- ── RENDER ────────────────────────────────────────────────────── -->
+  <section id="render">
+    <h2>Rendering</h2>
+    <div class="section-meta"><span class="tag tag-ui">Grid.tsx</span></div>
+
+    <h3>Absolute positioning</h3>
+    <p>Blocks are positioned with <code>position: absolute</code> inside a <code>position: relative</code> container. Each block's pixel position is computed from its grid coordinates:</p>
+
+<pre><span class="kw">const</span> GAP     = <span class="num">6</span>   <span class="cm">// px between cells</span>
+<span class="kw">const</span> PADDING = <span class="num">16</span>  <span class="cm">// px inset from grid edge</span>
+
+<span class="cm">// Block top-left position in pixels:</span>
+<span class="kw">const</span> baseTop  = block.row * (cellSize + GAP)
+<span class="kw">const</span> baseLeft = block.col * (cellSize + GAP)
+
+<span class="cm">// If dragging, offset by dragDelta cells:</span>
+<span class="kw">const</span> top  = block.direction === <span class="str">'vertical'</span>   ? baseTop  + dragDelta * (cellSize + GAP) : baseTop
+<span class="kw">const</span> left = block.direction === <span class="str">'horizontal'</span> ? baseLeft + dragDelta * (cellSize + GAP) : baseLeft
+
+<span class="cm">// Block pixel dimensions:</span>
+<span class="kw">const</span> w = block.direction === <span class="str">'horizontal'</span>
+  ? block.length * cellSize + (block.length - <span class="num">1</span>) * GAP : cellSize
+<span class="kw">const</span> h = block.direction === <span class="str">'vertical'</span>
+  ? block.length * cellSize + (block.length - <span class="num">1</span>) * GAP : cellSize</pre>
+
+    <h3>Memoisation</h3>
+    <p>Two sub-components are wrapped in <code>React.memo()</code>:</p>
+    <ul style="margin: 0 0 14px 20px; color: #c9d1d9;">
+      <li><code>CellGrid</code> — the background grid of cells. Re-renders only when <code>gridSize</code> or <code>cellSize</code> changes (never during normal gameplay).</li>
+      <li><code>BlockPiece</code> — a single block. Re-renders only when <em>its own</em> props change (position, drag state, selection).</li>
+    </ul>
+    <p>This means moving one block only re-renders that one block, not all blocks. For a 6×6 grid this is a minor optimisation, but it demonstrates the pattern for larger grids.</p>
+
+    <h3>Responsive cell size</h3>
+    <p>A <code>useCellSize()</code> hook watches the window dimensions and returns a cell size between 44 px and 64 px, so the grid fits on any screen from a small phone to a wide monitor.</p>
+  </section>
+
+  <!-- ── SOLVER ────────────────────────────────────────────────────── -->
+  <section id="solver">
+    <h2>BFS vs DFS Solver</h2>
+    <div class="section-meta"><span class="tag tag-algo">solver.ts</span> · Graph Search</div>
+
+    <p>The puzzle state space is a graph: each node is a <code>GameState</code>, each edge is a legal move. Finding the solution means finding a path from the initial node to a won node.</p>
+
+    <p>The solver implements both BFS and DFS with a single function — the only difference is <strong>how the queue is accessed</strong>:</p>
+
+<pre><span class="kw">function</span> <span class="fn">solve</span>(
+  initial: <span class="ty">GameState</span>,
+  algorithm: <span class="str">'bfs'</span> | <span class="str">'dfs'</span> = <span class="str">'bfs'</span>,
+  maxStates = <span class="num">100_000</span>
+): <span class="ty">SolverResult</span> {
+  <span class="kw">if</span> (initial.won) <span class="kw">return</span> { solved: <span class="kw">true</span>, moves: [], statesExplored: <span class="num">0</span> }
+
+  <span class="kw">const</span> visited = <span class="kw">new</span> <span class="ty">Set</span>&lt;<span class="ty">string</span>&gt;()
+  <span class="kw">const</span> queue: <span class="ty">SearchNode</span>[] = [{ state: initial, moves: [] }]
+  visited.<span class="fn">add</span>(<span class="fn">serializeState</span>(initial))
+
+  <span class="kw">while</span> (queue.length > <span class="num">0</span>) {
+    <span class="cm">// BFS = shift (FIFO queue) → shortest path</span>
+    <span class="cm">// DFS = pop  (LIFO stack) → any path</span>
+    <span class="kw">const</span> node = algorithm === <span class="str">'bfs'</span> ? queue.<span class="fn">shift</span>() : queue.<span class="fn">pop</span>()
+
+    <span class="kw">for</span> (<span class="kw">const</span> action <span class="kw">of</span> <span class="fn">getLegalMoves</span>(node.state)) {
+      <span class="kw">const</span> next = <span class="fn">applyMove</span>(node.state, action)
+      <span class="kw">const</span> key  = <span class="fn">serializeState</span>(next)
+      <span class="kw">if</span> (visited.<span class="fn">has</span>(key)) <span class="kw">continue</span>  <span class="cm">// already explored</span>
+      visited.<span class="fn">add</span>(key)
+
+      <span class="kw">const</span> path = [...node.moves, action]
+      <span class="kw">if</span> (next.won) <span class="kw">return</span> { solved: <span class="kw">true</span>, moves: path, statesExplored }
+      queue.<span class="fn">push</span>({ state: next, moves: path })
+    }
+  }
+  <span class="kw">return</span> { solved: <span class="kw">false</span>, moves: [], statesExplored }
+}</pre>
+
+    <h3>BFS vs DFS — when to use each</h3>
+    <table>
+      <tr><th></th><th>BFS</th><th>DFS</th></tr>
+      <tr><td><strong>Queue type</strong></td><td>FIFO (<code>shift</code>)</td><td>LIFO (<code>pop</code>)</td></tr>
+      <tr><td><strong>Explores</strong></td><td>Level by level (nearest first)</td><td>One branch as deep as possible</td></tr>
+      <tr><td><strong>Guarantees</strong></td><td>Shortest solution</td><td>A solution (not necessarily optimal)</td></tr>
+      <tr><td><strong>Memory</strong></td><td>O(b<sup>d</sup>) — can be large</td><td>O(d) — very small</td></tr>
+      <tr><td><strong>Best for</strong></td><td>Minimum-move puzzle solutions</td><td>Checking if a solution exists quickly</td></tr>
+    </table>
+
+    <div class="callout callout-info">
+      <strong>The visited set is critical</strong>
+      Without the visited set, the solver would loop forever: moving block A right then left returns to the same state. The set stores serialized state strings and skips any state already seen. This transforms an infinite cycle into a finite DAG traversal.
+    </div>
+  </section>
+
+  <!-- ── HASHING ───────────────────────────────────────────────────── -->
+  <section id="hashing">
+    <h2>State Hashing</h2>
+    <div class="section-meta"><span class="tag tag-algo">engine.ts</span> · <code>serializeState()</code></div>
+
+    <p>Two <code>GameState</code> objects represent the same board position if every block is in the same cell. Since blocks is a JavaScript array, direct equality (<code>===</code>) won't work — two different array objects can have the same contents. Instead, we <em>serialize</em> the state to a canonical string:</p>
+
+<pre><span class="kw">function</span> <span class="fn">serializeState</span>(state: <span class="ty">GameState</span>): <span class="ty">string</span> {
+  <span class="kw">return</span> state.blocks
+    .<span class="fn">slice</span>()                              <span class="cm">// copy so sort doesn't mutate</span>
+    .<span class="fn">sort</span>((a, b) => a.id.<span class="fn">localeCompare</span>(b.id)) <span class="cm">// canonical order</span>
+    .<span class="fn">map</span>(b => <span class="str">`</span>${b.id}<span class="str">:</span>${b.row}<span class="str">,</span>${b.col}<span class="str">`</span>)  <span class="cm">// "id:row,col"</span>
+    .<span class="fn">join</span>(<span class="str">'|'</span>)
+}<span class="cm">
+// Example output:
+// "hC:4,1|h0:0,3|h5:5,2|target:2,0|vA:1,2|vB:2,4|vD:3,0"</span></pre>
+
+    <p>The sort ensures that two states with blocks in the same positions but different array orders produce the same string. The string is then used as a key in a JavaScript <code>Set&lt;string&gt;</code>, which has O(1) average insert and lookup.</p>
+
+    <div class="callout callout-tip">
+      <strong>Alternative: Zobrist hashing</strong>
+      For very large state spaces, you'd use Zobrist hashing — XOR a random 64-bit number for each (block, position) pair. It's faster than string concatenation and avoids memory allocation. For a 6×6 grid with ~10 blocks, string hashing is plenty fast.
+    </div>
+  </section>
+
+  <!-- ── COMPLEXITY ────────────────────────────────────────────────── -->
+  <section id="complexity">
+    <h2>Complexity Analysis</h2>
+    <div class="section-meta"><span class="tag tag-algo">Theory</span></div>
+
+    <h3>State space size</h3>
+    <p>An upper bound: each block occupies 1 row or column and can slide within it. In a 6-cell row, a block of length 2 has 5 positions. With ~10 blocks, the theoretical maximum is roughly 5<sup>10</sup> ≈ 10 million states. In practice, collisions between blocks reduce this dramatically — typical levels have a few thousand reachable states.</p>
+
+    <h3>Solver complexity</h3>
+    <table>
+      <tr><th></th><th>Time</th><th>Space</th></tr>
+      <tr><td>BFS</td><td>O(V + E)</td><td>O(V) — stores all reachable states</td></tr>
+      <tr><td>DFS</td><td>O(V + E)</td><td>O(d) — stores one path at a time</td></tr>
+    </table>
+    <p>Where V = number of unique states, E = number of transitions (legal moves), d = depth of solution. The solver caps exploration at 100,000 states to prevent the UI from freezing on unsolvable or extremely complex inputs.</p>
+
+    <h3>Engine function complexity</h3>
+    <table>
+      <tr><th>Function</th><th>Complexity</th><th>Notes</th></tr>
+      <tr><td><code>buildOccupancy</code></td><td>O(n · L)</td><td>n blocks, L avg length (≈2–3)</td></tr>
+      <tr><td><code>getMovableRange</code></td><td>O(G)</td><td>G = gridSize, scanning one row/col</td></tr>
+      <tr><td><code>applyMove</code></td><td>O(n)</td><td>Maps over all blocks</td></tr>
+      <tr><td><code>getLegalMoves</code></td><td>O(n · G)</td><td>Range for every block</td></tr>
+      <tr><td><code>serializeState</code></td><td>O(n log n)</td><td>Dominated by sort</td></tr>
+    </table>
+  </section>
+
+  <!-- ── TESTING ───────────────────────────────────────────────────── -->
+  <section id="testing">
+    <h2>Test Strategy</h2>
+    <div class="section-meta"><span class="tag tag-engine">Vitest</span></div>
+
+    <p>Because the game engine is pure functions, every function can be tested directly with no mocking. Tests live alongside source files (<code>engine.test.ts</code>, <code>solver.test.ts</code>, <code>levels.test.ts</code>).</p>
+
+    <h3>What is tested</h3>
+    <table>
+      <tr><th>File</th><th>Tests</th><th>What they verify</th></tr>
+      <tr><td><code>engine.test.ts</code></td><td>~40</td><td>Occupancy map, range scanning, move clamping, win detection, immutability, legal moves enumeration</td></tr>
+      <tr><td><code>solver.test.ts</code></td><td>5</td><td>BFS returns optimal path, DFS returns valid path, already-won exits immediately</td></tr>
+      <tr><td><code>levels.test.ts</code></td><td>20</td><td>All 10 levels: no overlapping blocks, each is solvable via BFS</td></tr>
+    </table>
+
+<pre><span class="cm">// Example: testing that a block cannot slide through another</span>
+<span class="fn">it</span>(<span class="str">'getMovableRange stops at blocking block'</span>, () => {
+  <span class="kw">const</span> state: <span class="ty">GameState</span> = {
+    gridSize: <span class="num">6</span>, exitRow: <span class="num">2</span>, moves: <span class="num">0</span>, won: <span class="kw">false</span>,
+    blocks: [
+      { id: <span class="str">'h'</span>, row: <span class="num">2</span>, col: <span class="num">0</span>, length: <span class="num">2</span>, direction: <span class="str">'horizontal'</span>, isTarget: <span class="kw">false</span> },
+      { id: <span class="str">'v'</span>, row: <span class="num">1</span>, col: <span class="num">3</span>, length: <span class="num">2</span>, direction: <span class="str">'vertical'</span>,   isTarget: <span class="kw">false</span> },
+    ]
+  }
+  <span class="kw">const</span> range = <span class="fn">getMovableRange</span>(state.blocks[<span class="num">0</span>], state)
+  <span class="fn">expect</span>(range).toEqual({ min: <span class="num">0</span>, max: <span class="num">1</span> })  <span class="cm">// can move right by 1 only</span>
+})</pre>
+
+    <div class="callout callout-tip">
+      <strong>Run the tests</strong>
+      From the project root: <code>npm test</code> to run once, or <code>npm run test:watch</code> to rerun on file changes.
+    </div>
+
+    <h3>What is NOT unit-tested</h3>
+    <p>React component behaviour (drag, click, keyboard) is not tested with a DOM runner. This is a deliberate trade-off: the engine covering the logic, and the visual/interaction layer relies on manual testing and the browser's built-in input handling. Adding Playwright or React Testing Library end-to-end tests would be the next step.</p>
+  </section>
+
+</main>
+</div>
+
+<script>
+  // Highlight active section in sidebar as user scrolls
+  const sections = document.querySelectorAll('section[id]')
+  const navLinks = document.querySelectorAll('nav a[href^="#"]')
+
+  const observer = new IntersectionObserver(entries => {
+    entries.forEach(entry => {
+      if (entry.isIntersecting) {
+        navLinks.forEach(a => {
+          a.classList.toggle('active', a.getAttribute('href') === '#' + entry.target.id)
+        })
+      }
+    })
+  }, { rootMargin: '-20% 0px -70% 0px' })
+
+  sections.forEach(s => observer.observe(s))
+</script>
+</body>
+</html>
