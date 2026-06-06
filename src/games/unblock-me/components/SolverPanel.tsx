@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import type { GameState, MoveAction } from '../types'
-import { solve, type SolverAlgorithm } from '../solver'
+import type { SolverAlgorithm } from '../solver'
 
 interface Props {
   state: GameState
@@ -16,9 +16,10 @@ export function SolverPanel({ state, levelIndex, onPlaySolution }: Props) {
   // Clear result when level changes
   useEffect(() => { setResult(null) }, [levelIndex])
 
-  function handleSolve() {
+  async function handleSolve() {
     setRunning(true)
     setResult(null)
+    const { solve } = await import('../solver')
     setTimeout(() => {
       const r = solve(state, algorithm)
       setResult({ solved: r.solved, moves: r.moves.length, states: r.statesExplored })

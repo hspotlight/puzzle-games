@@ -18,8 +18,12 @@ export function buildOccupancy(state: GameState): (string | null)[][] {
 }
 
 /** Returns how many steps the block can move in the negative (-) and positive (+) direction */
-export function getMovableRange(block: Block, state: GameState): { min: number; max: number } {
-  const grid = buildOccupancy(state)
+export function getMovableRange(
+  block: Block,
+  state: GameState,
+  prebuiltOccupancy?: (string | null)[][]
+): { min: number; max: number } {
+  const grid = prebuiltOccupancy ?? buildOccupancy(state)
   let min = 0
   let max = 0
 

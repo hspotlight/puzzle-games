@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef, useEffect } from 'react'
+import { useState, useCallback, useReducer, useRef, useEffect } from 'react'
 import { Grid } from './components/Grid'
 import { SolverPanel } from './components/SolverPanel'
 import { HowToPlay } from './components/HowToPlay'
@@ -22,17 +22,46 @@ function useCellSize(gridSize: number) {
       setCellSize(Math.max(MIN_CELL, Math.min(MAX_CELL, computed)))
     }
     update()
-    window.addEventListener('resize', update)
-    return () => window.removeEventListener('resize', update)
+    let timer: ReturnType<typeof setTimeout>
+    const handler = () => { clearTimeout(timer); timer = setTimeout(update, 150) }
+    window.addEventListener('resize', handler)
+    return () => { window.removeEventListener('resize', handler); clearTimeout(timer) }
   }, [gridSize])
 
   return cellSize
 }
 
+interface GamePageState {
+  levelIndex: number
+  state: GameState
+  selectedBlockId: string | null
+}
+
+type Action =
+  | { type: 'LOAD_LEVEL'; index: number }
+  | { type: 'MOVE'; action: MoveAction }
+  | { type: 'SELECT'; id: string | null }
+  | { type: 'SET_STATE'; state: GameState }
+
+function reducer(page: GamePageState, action: Action): GamePageState {
+  switch (action.type) {
+    case 'LOAD_LEVEL':
+      return { levelIndex: action.index, state: LEVELS[action.index], selectedBlockId: null }
+    case 'MOVE':
+      return { ...page, state: applyMove(page.state, action.action) }
+    case 'SELECT':
+      return { ...page, selectedBlockId: action.id }
+    case 'SET_STATE':
+      return { ...page, state: action.state }
+  }
+}
+
 export function UnblockMe() {
-  const [levelIndex, setLevelIndex] = useState(0)
-  const [state, setState] = useState<GameState>(() => LEVELS[0])
-  const [selectedBlockId, setSelectedBlockId] = useState<string | null>(null)
+  const [{ levelIndex, state, selectedBlockId }, dispatch] = useReducer(reducer, {
+    levelIndex: 0,
+    state: LEVELS[0],
+    selectedBlockId: null,
+  })
   const [showHelp, setShowHelp] = useState(false)
   const animTimers = useRef<ReturnType<typeof setTimeout>[]>([])
   const cellSize = useCellSize(state.gridSize)
@@ -43,33 +72,30 @@ export function UnblockMe() {
   }
 
   const handleMove = useCallback((action: MoveAction) => {
-    setState(prev => applyMove(prev, action))
+    dispatch({ type: 'MOVE', action })
   }, [])
 
   function loadLevel(idx: number) {
     cancelAnimation()
-    setLevelIndex(idx)
-    setState(LEVELS[idx])
-    setSelectedBlockId(null)
+    dispatch({ type: 'LOAD_LEVEL', index: idx })
   }
 
   function handleReset() {
     cancelAnimation()
-    setState(LEVELS[levelIndex])
-    setSelectedBlockId(null)
+    dispatch({ type: 'LOAD_LEVEL', index: levelIndex })
   }
 
   function handlePlaySolution(moves: MoveAction[]) {
     cancelAnimation()
     const base = LEVELS[levelIndex]
-    setState(base)
-    setSelectedBlockId(null)
+    dispatch({ type: 'SET_STATE', state: base })
+    dispatch({ type: 'SELECT', id: null })
 
     let current = base
     moves.forEach((move, i) => {
       const id = setTimeout(() => {
         current = applyMove(current, move)
-        setState({ ...current })
+        dispatch({ type: 'SET_STATE', state: { ...current } })
       }, (i + 1) * 450)
       animTimers.current.push(id)
     })
@@ -125,7 +151,7 @@ export function UnblockMe() {
             state={state}
             onMove={handleMove}
             selectedBlockId={selectedBlockId}
-            onSelectBlock={setSelectedBlockId}
+            onSelectBlock={(id) => dispatch({ type: 'SELECT', id })}
             cellSize={cellSize}
           />
 

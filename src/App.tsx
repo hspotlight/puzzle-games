@@ -1,6 +1,16 @@
+import { lazy, Suspense } from 'react'
 import { BrowserRouter, Routes, Route, Link } from 'react-router-dom'
-import { HomePage } from './pages/HomePage'
-import { UnblockMe } from './games/unblock-me/UnblockMe'
+
+const HomePage = lazy(() => import('./pages/HomePage').then(m => ({ default: m.HomePage })))
+const UnblockMe = lazy(() => import('./games/unblock-me/UnblockMe').then(m => ({ default: m.UnblockMe })))
+
+function Loading() {
+  return (
+    <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: 200, color: '#bcaaa4' }}>
+      Loading…
+    </div>
+  )
+}
 
 function NavBar() {
   return (
@@ -29,10 +39,12 @@ export default function App() {
     <BrowserRouter>
       <div style={{ minHeight: '100vh', background: '#2c1810', fontFamily: 'system-ui, sans-serif' }}>
         <NavBar />
-        <Routes>
-          <Route path="/" element={<HomePage />} />
-          <Route path="/unblock-me" element={<UnblockMe />} />
-        </Routes>
+        <Suspense fallback={<Loading />}>
+          <Routes>
+            <Route path="/" element={<HomePage />} />
+            <Route path="/unblock-me" element={<UnblockMe />} />
+          </Routes>
+        </Suspense>
       </div>
     </BrowserRouter>
   )
