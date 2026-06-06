@@ -1,4 +1,5 @@
-import type { GameState, MoveAction } from '../types'
+import { useState, useRef, useCallback } from 'react'
+import type { GameState, MoveAction, Block } from '../types'
 import { getMovableRange } from '../engine'
 
 interface Props {
@@ -12,15 +13,89 @@ const CELL_SIZE = 64
 const GAP = 6
 const PADDING = 16
 
+interface DragState {
+  blockId: string
+  startX: number
+  startY: number
+  currentDelta: number
+  min: number
+  max: number
+}
+
 export function Grid({ state, onMove, selectedBlockId, onSelectBlock }: Props) {
   const gridPx = state.gridSize * CELL_SIZE + (state.gridSize - 1) * GAP
+  const [drag, setDrag] = useState<DragState | null>(null)
+  const dragRef = useRef<DragState | null>(null)
 
-  function handleBlockClick(blockId: string) {
-    if (selectedBlockId === blockId) {
-      onSelectBlock(null)
-      return
-    }
-    onSelectBlock(blockId)
+  const handlePointerDown = useCallback(
+    (e: React.PointerEvent, block: Block) => {
+      e.preventDefault()
+      e.stopPropagation()
+      ;(e.currentTarget as HTMLElement).setPointerCapture(e.pointerId)
+
+      const { min, max } = getMovableRange(block, state)
+      const ds: DragState = {
+        blockId: block.id,
+        startX: e.clientX,
+        startY: e.clientY,
+        currentDelta: 0,
+        min,
+        max,
+      }
+      dragRef.current = ds
+      setDrag(ds)
+      onSelectBlock(block.id)
+    },
+    [state, onSelectBlock]
+  )
+
+  const handlePointerMove = useCallback(
+    (e: React.PointerEvent) => {
+      if (!dragRef.current) return
+      const ds = dragRef.current
+      const block = state.blocks.find(b => b.id === ds.blockId)
+      if (!block) return
+
+      const rawPx =
+        block.direction === 'horizontal'
+          ? e.clientX - ds.startX
+          : e.clientY - ds.startY
+
+      const rawDelta = Math.round(rawPx / (CELL_SIZE + GAP))
+      const clampedDelta = Math.max(ds.min, Math.min(ds.max, rawDelta))
+
+      if (clampedDelta !== ds.currentDelta) {
+        const updated = { ...ds, currentDelta: clampedDelta }
+        dragRef.current = updated
+        setDrag(updated)
+      }
+    },
+    [state]
+  )
+
+  const handlePointerUp = useCallback(
+    (e: React.PointerEvent) => {
+      e.stopPropagation()
+      const ds = dragRef.current
+      if (!ds) return
+
+      const wasDrag = Math.abs(ds.currentDelta) > 0
+      if (wasDrag) {
+        onMove({ blockId: ds.blockId, delta: ds.currentDelta })
+        onSelectBlock(null)
+      }
+      // If no movement (i.e. a click), keep selection — handleClick below handles toggle
+      dragRef.current = null
+      setDrag(null)
+    },
+    [onMove, onSelectBlock]
+  )
+
+  function handleBlockClick(e: React.MouseEvent, blockId: string) {
+    e.stopPropagation()
+    // Only toggle selection if this was a pure click (no drag movement)
+    if (dragRef.current) return
+    onSelectBlock(selectedBlockId === blockId ? null : blockId)
   }
 
   function handleArrowKey(e: React.KeyboardEvent) {
@@ -84,8 +159,10 @@ export function Grid({ state, onMove, selectedBlockId, onSelectBlock }: Props) {
         padding: PADDING,
         boxShadow: '0 8px 32px rgba(0,0,0,0.4)',
         outline: 'none',
+        touchAction: 'none',
       }}
     >
+      {/* Grid cell backgrounds */}
       {Array.from({ length: state.gridSize }).map((_, r) =>
         Array.from({ length: state.gridSize }).map((_, c) => (
           <div
@@ -117,6 +194,7 @@ export function Grid({ state, onMove, selectedBlockId, onSelectBlock }: Props) {
         }}
       />
 
+      {/* Blocks */}
       <div style={{ position: 'absolute', top: PADDING, left: PADDING }}>
         {state.blocks.map(block => {
           const w = block.direction === 'horizontal'
@@ -125,8 +203,20 @@ export function Grid({ state, onMove, selectedBlockId, onSelectBlock }: Props) {
           const h = block.direction === 'vertical'
             ? block.length * CELL_SIZE + (block.length - 1) * GAP
             : CELL_SIZE
-          const top = block.row * (CELL_SIZE + GAP)
-          const left = block.col * (CELL_SIZE + GAP)
+
+          const baseTop = block.row * (CELL_SIZE + GAP)
+          const baseLeft = block.col * (CELL_SIZE + GAP)
+
+          const isDragging = drag?.blockId === block.id
+          const dragDelta = isDragging ? drag.currentDelta : 0
+
+          const top = block.direction === 'vertical'
+            ? baseTop + dragDelta * (CELL_SIZE + GAP)
+            : baseTop
+          const left = block.direction === 'horizontal'
+            ? baseLeft + dragDelta * (CELL_SIZE + GAP)
+            : baseLeft
+
           const isSelected = selectedBlockId === block.id
           const bg = block.isTarget ? '#d32f2f' : isSelected ? '#ff8f00' : '#e65100'
 
@@ -134,7 +224,10 @@ export function Grid({ state, onMove, selectedBlockId, onSelectBlock }: Props) {
             <div
               key={block.id}
               data-testid={`block-${block.id}`}
-              onClick={e => { e.stopPropagation(); handleBlockClick(block.id) }}
+              onPointerDown={e => handlePointerDown(e, block)}
+              onPointerMove={handlePointerMove}
+              onPointerUp={handlePointerUp}
+              onClick={e => handleBlockClick(e, block.id)}
               style={{
                 position: 'absolute',
                 top,
@@ -143,12 +236,16 @@ export function Grid({ state, onMove, selectedBlockId, onSelectBlock }: Props) {
                 height: h,
                 background: bg,
                 borderRadius: 6,
-                boxShadow: isSelected
+                boxShadow: isDragging
+                  ? '0 0 0 3px #fff, 0 8px 24px rgba(0,0,0,0.5)'
+                  : isSelected
                   ? '0 0 0 3px #fff, 0 4px 12px rgba(0,0,0,0.4)'
                   : '0 3px 8px rgba(0,0,0,0.3)',
-                cursor: 'pointer',
-                transition: 'top 0.15s ease, left 0.15s ease, background 0.1s',
+                cursor: isDragging ? 'grabbing' : 'grab',
+                // Only animate when not actively dragging
+                transition: isDragging ? 'none' : 'top 0.15s ease, left 0.15s ease, background 0.1s',
                 userSelect: 'none',
+                zIndex: isDragging ? 10 : 1,
                 backgroundImage: block.isTarget
                   ? 'none'
                   : 'repeating-linear-gradient(90deg,rgba(255,255,255,0.07) 0px,rgba(255,255,255,0.07) 4px,transparent 4px,transparent 12px)',
