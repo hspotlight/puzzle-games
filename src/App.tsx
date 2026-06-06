@@ -1,5 +1,5 @@
 import { lazy, Suspense } from 'react'
-import { BrowserRouter, Routes, Route, Link } from 'react-router-dom'
+import { HashRouter, Routes, Route, Link } from 'react-router-dom'
 
 const HomePage = lazy(() => import('./pages/HomePage').then(m => ({ default: m.HomePage })))
 const UnblockMe = lazy(() => import('./games/unblock-me/UnblockMe').then(m => ({ default: m.UnblockMe })))
@@ -36,7 +36,7 @@ function NavBar() {
 
 export default function App() {
   return (
-    <BrowserRouter>
+    <HashRouter>
       <div style={{ minHeight: '100vh', background: '#2c1810', fontFamily: 'system-ui, sans-serif' }}>
         <NavBar />
         <Suspense fallback={<Loading />}>
@@ -46,6 +46,6 @@ export default function App() {
           </Routes>
         </Suspense>
       </div>
-    </BrowserRouter>
+    </HashRouter>
   )
 }
