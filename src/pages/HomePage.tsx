@@ -23,6 +23,13 @@ const GAMES: GameCard[] = [
     emoji: '🔢',
     available: true,
   },
+  {
+    title: 'Flow Free',
+    description: 'Connect matching colored dots and fill every cell on the grid.',
+    path: '/flow-free',
+    emoji: '🌈',
+    available: true,
+  },
 ]
 
 export function HomePage() {

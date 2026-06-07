@@ -1,0 +1,799 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Flow Free — Game Internals</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --bg:        #0d1117;
+      --surface:   #161b22;
+      --surface2:  #21262d;
+      --border:    #30363d;
+      --text:      #e6edf3;
+      --muted:     #8b949e;
+      --accent:    #f78166;
+      --accent2:   #79c0ff;
+      --accent3:   #56d364;
+      --accent4:   #d2a8ff;
+      --yellow:    #e3b341;
+      --code-bg:   #0d1117;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html { scroll-behavior: smooth; }
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Inter', system-ui, sans-serif;
+      font-size: 15px;
+      line-height: 1.7;
+    }
+
+    .layout {
+      display: grid;
+      grid-template-columns: 260px 1fr;
+      min-height: 100vh;
+    }
+
+    aside {
+      background: var(--surface);
+      border-right: 1px solid var(--border);
+      padding: 28px 0;
+      position: sticky;
+      top: 0;
+      height: 100vh;
+      overflow-y: auto;
+    }
+
+    .sidebar-logo {
+      padding: 0 20px 24px;
+      border-bottom: 1px solid var(--border);
+      margin-bottom: 16px;
+    }
+
+    .sidebar-logo a {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      text-decoration: none;
+    }
+
+    .sidebar-logo .icon {
+      width: 32px; height: 32px;
+      background: linear-gradient(135deg, #1e88e5, #43a047);
+      border-radius: 8px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 16px;
+      flex-shrink: 0;
+    }
+
+    .sidebar-logo h1 {
+      font-size: 14px;
+      font-weight: 700;
+      color: var(--text);
+      line-height: 1.2;
+    }
+
+    .sidebar-logo p {
+      font-size: 11px;
+      color: var(--muted);
+    }
+
+    nav ul { list-style: none; }
+
+    .nav-section {
+      padding: 6px 20px 4px;
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin-top: 8px;
+    }
+
+    nav li a {
+      display: block;
+      padding: 5px 20px 5px 28px;
+      font-size: 13px;
+      color: var(--muted);
+      text-decoration: none;
+      border-left: 2px solid transparent;
+      transition: color .15s, border-color .15s, background .15s;
+    }
+
+    nav li a:hover {
+      color: var(--text);
+      background: rgba(255,255,255,.04);
+    }
+
+    nav li a.active {
+      color: var(--accent2);
+      border-left-color: var(--accent2);
+      background: rgba(121,192,255,.07);
+    }
+
+    main {
+      max-width: 900px;
+      padding: 48px 64px 96px;
+    }
+
+    section { margin-bottom: 80px; }
+
+    h2 {
+      font-size: 26px;
+      font-weight: 700;
+      color: var(--text);
+      margin-bottom: 4px;
+      padding-top: 8px;
+    }
+
+    .section-meta {
+      font-size: 12px;
+      color: var(--muted);
+      margin-bottom: 24px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .tag {
+      display: inline-block;
+      padding: 1px 8px;
+      border-radius: 20px;
+      font-size: 11px;
+      font-weight: 600;
+    }
+
+    .tag-engine  { background: rgba(247,129,102,.15); color: var(--accent); }
+    .tag-ui      { background: rgba(121,192,255,.15); color: var(--accent2); }
+    .tag-algo    { background: rgba(86,211,100,.15);  color: var(--accent3); }
+    .tag-data    { background: rgba(210,168,255,.15); color: var(--accent4); }
+    .tag-design  { background: rgba(227,179,65,.15);  color: var(--yellow); }
+
+    h3 {
+      font-size: 17px;
+      font-weight: 600;
+      color: var(--text);
+      margin: 28px 0 10px;
+    }
+
+    p { color: #c9d1d9; margin-bottom: 14px; }
+
+    a { color: var(--accent2); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+
+    pre {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 20px 24px;
+      overflow-x: auto;
+      font-family: 'JetBrains Mono', 'Fira Code', monospace;
+      font-size: 13px;
+      line-height: 1.65;
+      margin: 16px 0;
+      position: relative;
+    }
+
+    pre .label {
+      position: absolute;
+      top: 10px; right: 14px;
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--muted);
+      font-family: 'Inter', sans-serif;
+    }
+
+    code { font-family: 'JetBrains Mono', monospace; font-size: .9em; }
+    p code, li code {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      padding: 1px 6px;
+      border-radius: 4px;
+      color: var(--accent2);
+    }
+
+    .kw  { color: #ff7b72; }
+    .ty  { color: #79c0ff; }
+    .fn  { color: #d2a8ff; }
+    .str { color: #a5d6ff; }
+    .num { color: #79c0ff; }
+    .cm  { color: #8b949e; font-style: italic; }
+    .op  { color: #ff7b72; }
+    .id  { color: #e6edf3; }
+
+    .diagram {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 24px 28px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 13px;
+      line-height: 1.7;
+      margin: 16px 0;
+      overflow-x: auto;
+      white-space: pre;
+    }
+
+    .grid-demo {
+      display: inline-grid;
+      grid-template-columns: repeat(5, 48px);
+      grid-template-rows: repeat(5, 48px);
+      gap: 4px;
+      background: #5d4037;
+      padding: 10px;
+      border-radius: 10px;
+      margin: 16px 0;
+    }
+
+    .cell {
+      width: 48px; height: 48px;
+      background: rgba(0,0,0,.15);
+      border-radius: 4px;
+      display: flex; align-items: center; justify-content: center;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 11px;
+      color: rgba(255,255,255,.4);
+    }
+
+    .cell.red    { background: #e53935; color: #fff; font-weight: 700; border-radius: 50%; }
+    .cell.blue   { background: #1e88e5; color: #fff; font-weight: 700; border-radius: 50%; }
+    .cell.green  { background: #43a047; color: #fff; font-weight: 700; border-radius: 50%; }
+    .cell.yellow { background: #fdd835; color: #333; font-weight: 700; border-radius: 50%; }
+    .cell.orange { background: #fb8c00; color: #fff; font-weight: 700; border-radius: 50%; }
+    .cell.path-red    { background: #e5393566; }
+    .cell.path-blue   { background: #1e88e566; }
+    .cell.path-green  { background: #43a04766; }
+
+    .callout {
+      border-left: 3px solid;
+      padding: 14px 18px;
+      border-radius: 0 8px 8px 0;
+      margin: 16px 0;
+    }
+
+    .callout-info  { border-color: var(--accent2); background: rgba(121,192,255,.07); }
+    .callout-tip   { border-color: var(--accent3); background: rgba(86,211,100,.07); }
+    .callout-warn  { border-color: var(--yellow);  background: rgba(227,179,65,.07); }
+
+    .callout strong { display: block; margin-bottom: 4px; font-size: 13px; }
+    .callout-info  strong { color: var(--accent2); }
+    .callout-tip   strong { color: var(--accent3); }
+    .callout-warn  strong { color: var(--yellow); }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 14px;
+      margin: 16px 0;
+    }
+
+    th {
+      background: var(--surface2);
+      padding: 10px 14px;
+      text-align: left;
+      font-weight: 600;
+      font-size: 12px;
+      letter-spacing: .04em;
+      color: var(--muted);
+      border-bottom: 1px solid var(--border);
+    }
+
+    td {
+      padding: 10px 14px;
+      border-bottom: 1px solid var(--border);
+      vertical-align: top;
+    }
+
+    tr:last-child td { border-bottom: none; }
+    tr:hover td { background: rgba(255,255,255,.02); }
+    td:first-child code { color: var(--accent4); }
+
+    .steps {
+      counter-reset: step;
+      list-style: none;
+      margin: 16px 0;
+    }
+
+    .steps li {
+      counter-increment: step;
+      display: flex;
+      gap: 16px;
+      margin-bottom: 12px;
+    }
+
+    .steps li::before {
+      content: counter(step);
+      flex-shrink: 0;
+      width: 28px; height: 28px;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 12px;
+      font-weight: 700;
+      color: var(--accent2);
+      margin-top: 2px;
+    }
+
+    .flow {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 8px;
+      margin: 16px 0;
+      font-size: 13px;
+    }
+
+    .flow-box {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 8px 14px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 12px;
+    }
+
+    .flow-arrow { color: var(--muted); font-size: 18px; }
+
+    .hero {
+      background: linear-gradient(135deg, rgba(30,136,229,.12), rgba(67,160,71,.08));
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 36px 40px;
+      margin-bottom: 56px;
+    }
+
+    .hero h1 {
+      font-size: 36px;
+      font-weight: 800;
+      background: linear-gradient(135deg, #1e88e5, #43a047, #fdd835);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+      margin-bottom: 10px;
+      line-height: 1.2;
+    }
+
+    .hero p { font-size: 16px; color: var(--muted); margin: 0; }
+
+    .hero-chips {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 18px;
+    }
+
+    .chip {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 4px 12px;
+      font-size: 12px;
+      color: var(--muted);
+      font-family: 'JetBrains Mono', monospace;
+    }
+
+    @media (max-width: 820px) {
+      .layout { grid-template-columns: 1fr; }
+      aside { position: static; height: auto; border-right: none; border-bottom: 1px solid var(--border); }
+      main { padding: 32px 24px 80px; }
+    }
+  </style>
+</head>
+<body>
+<div class="layout">
+
+<!-- ══════════════════════════════ SIDEBAR ══════════════════════════════ -->
+<aside>
+  <div class="sidebar-logo">
+    <a href="/#/flow-free">
+      <div class="icon">🌈</div>
+      <div>
+        <h1>Flow Free</h1>
+        <p>Game Internals</p>
+      </div>
+    </a>
+  </div>
+  <nav>
+    <div class="nav-section">Overview</div>
+    <ul>
+      <li><a href="#overview">Introduction</a></li>
+      <li><a href="#rules">Rules &amp; Objective</a></li>
+    </ul>
+
+    <div class="nav-section">Data Model</div>
+    <ul>
+      <li><a href="#types">Type Definitions</a></li>
+      <li><a href="#occupancy">Occupancy Grid</a></li>
+    </ul>
+
+    <div class="nav-section">Game Engine</div>
+    <ul>
+      <li><a href="#path-drawing">Path Drawing</a></li>
+      <li><a href="#win">Win Condition</a></li>
+      <li><a href="#legal-moves">Legal Moves</a></li>
+    </ul>
+
+    <div class="nav-section">Algorithms</div>
+    <ul>
+      <li><a href="#bfs">BFS Solver</a></li>
+      <li><a href="#state-space">State Space</a></li>
+      <li><a href="#cs-concepts">CS Concepts</a></li>
+    </ul>
+
+    <div class="nav-section">Testing</div>
+    <ul>
+      <li><a href="#testing">Testing Strategy</a></li>
+    </ul>
+  </nav>
+
+  <div style="padding:20px;border-top:1px solid var(--border);margin-top:16px">
+    <a href="internals-unblock-me.html" style="color:var(--muted);font-size:13px;display:block;margin-bottom:6px">→ Unblock Me Internals</a>
+    <a href="internals-8-puzzle.html" style="color:var(--muted);font-size:13px">→ 8-Puzzle Internals</a>
+  </div>
+</aside>
+
+<!-- ══════════════════════════════ MAIN ══════════════════════════════ -->
+<main>
+
+  <!-- Hero -->
+  <div class="hero">
+    <h1>Flow Free — Internals</h1>
+    <p>How a connect-the-dots puzzle is modeled, solved with BFS, and rendered in React.</p>
+    <div class="hero-chips">
+      <span class="chip">React 19</span>
+      <span class="chip">TypeScript</span>
+      <span class="chip">BFS / DFS</span>
+      <span class="chip">Graph search</span>
+      <span class="chip">Constraint satisfaction</span>
+      <span class="chip">Vitest 4</span>
+    </div>
+  </div>
+
+  <!-- ── Overview ── -->
+  <section id="overview">
+    <h2>Introduction</h2>
+    <div class="section-meta"><span class="tag tag-design">Overview</span></div>
+
+    <p>Flow Free is a grid-based puzzle where the player draws paths between colored endpoint pairs. Every cell on the board must be covered by exactly one path, and paths cannot cross. The challenge scales with grid size and number of colors.</p>
+
+    <p>From a CS perspective Flow Free is interesting because it is an NP-complete problem in the general case (it is a variant of the Hamiltonian path problem) yet small instances are tractable with BFS. The "fill every cell" constraint dramatically reduces the branching factor compared to solving without it — most partial paths that leave isolated pockets are immediately pruned by the solver heuristic.</p>
+
+    <div class="callout callout-tip">
+      <strong>Why this puzzle?</strong>
+      Flow Free illustrates graph search, constraint satisfaction, path planning, and immutable state management all in a single small codebase — concepts that appear throughout systems design, robotics, and AI.
+    </div>
+  </section>
+
+  <!-- ── Rules ── -->
+  <section id="rules">
+    <h2>Rules &amp; Objective</h2>
+    <div class="section-meta"><span class="tag tag-design">Game Design</span></div>
+
+    <ul class="steps">
+      <li><span>The board is an N×N grid with colored dot-pairs (endpoints) placed at fixed positions.</span></li>
+      <li><span>The player draws a path between each pair of same-colored dots by dragging across adjacent cells (up/down/left/right — no diagonals).</span></li>
+      <li><span>Paths cannot cross or overlap. Stepping on a cell already occupied by another color is forbidden.</span></li>
+      <li><span>The puzzle is solved when every color has a completed path <em>and</em> every cell on the grid is covered by some path.</span></li>
+    </ul>
+
+    <p>The "fill every cell" rule is what makes Flow Free algorithmically rich. Without it, each color could be connected trivially by a direct 2-cell path. The full-coverage constraint forces the solver to explore long, winding routes — and makes human play satisfying.</p>
+
+    <h3>Example 4×4 board</h3>
+    <div class="grid-demo" style="grid-template-columns: repeat(4,48px);grid-template-rows: repeat(4,48px)">
+      <div class="cell red">R</div><div class="cell"></div><div class="cell"></div><div class="cell blue">B</div>
+      <div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div>
+      <div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div>
+      <div class="cell blue">B</div><div class="cell"></div><div class="cell"></div><div class="cell red">R</div>
+    </div>
+    <p style="font-size:13px;color:var(--muted)">Red and blue each need a path connecting their two dots, and all 16 cells must be covered.</p>
+  </section>
+
+  <!-- ── Data Model ── -->
+  <section id="types">
+    <h2>Type Definitions</h2>
+    <div class="section-meta"><span class="tag tag-data">Data Model</span></div>
+
+    <p>The data model is three plain TypeScript interfaces — no classes, no methods. All game logic lives in pure functions that accept and return these types.</p>
+
+<pre><code><span class="cm">// types.ts</span>
+
+<span class="kw">export type</span> <span class="ty">ColorId</span> <span class="op">=</span> <span class="ty">string</span>  <span class="cm">// e.g. 'red', 'blue', 'green'</span>
+
+<span class="kw">export interface</span> <span class="ty">Endpoint</span> {
+  row: <span class="ty">number</span>
+  col: <span class="ty">number</span>
+  colorId: <span class="ty">ColorId</span>
+}
+
+<span class="kw">export interface</span> <span class="ty">FlowPath</span> {
+  colorId: <span class="ty">ColorId</span>
+  cells: <span class="ty">Array</span>&lt;{ row: <span class="ty">number</span>; col: <span class="ty">number</span> }&gt;  <span class="cm">// ordered endpoint A → B</span>
+}
+
+<span class="kw">export interface</span> <span class="ty">GameState</span> {
+  gridSize: <span class="ty">number</span>
+  endpoints: <span class="ty">Endpoint</span>[]   <span class="cm">// fixed — never changes during a level</span>
+  paths: <span class="ty">FlowPath</span>[]       <span class="cm">// one entry per active color</span>
+  moves: <span class="ty">number</span>
+  won: <span class="ty">boolean</span>
+}
+
+<span class="kw">export interface</span> <span class="ty">MoveAction</span> {
+  colorId: <span class="ty">ColorId</span>
+  cells: <span class="ty">Array</span>&lt;{ row: <span class="ty">number</span>; col: <span class="ty">number</span> }&gt;  <span class="cm">// replaces existing path for this color</span>
+}</code></pre>
+
+    <h3>Why no occupancy in GameState?</h3>
+    <p>The occupancy grid (which cell is owned by which color) is a function of <code>paths</code> — it is derived data. Storing it in <code>GameState</code> would create redundancy: two sources of truth that must be kept in sync. Instead, <code>buildOccupancy(state)</code> recomputes it on demand in O(N²) time, which is negligible for typical puzzle sizes.</p>
+
+    <div class="callout callout-warn">
+      <strong>Immutability invariant</strong>
+      Every function that returns a <code>GameState</code> must return a <em>new</em> object. <code>applyMove</code> uses the spread operator: <code>{ ...state, paths: newPaths, moves: state.moves + 1, won }</code>. Never call <code>.push()</code> or <code>.splice()</code> on a state array — create a new array instead.
+    </div>
+  </section>
+
+  <!-- ── Occupancy ── -->
+  <section id="occupancy">
+    <h2>Occupancy Grid</h2>
+    <div class="section-meta"><span class="tag tag-engine">Engine</span></div>
+
+    <p><code>buildOccupancy</code> is the central utility function in the engine. It converts the list of paths into a 2D array where each cell contains either the <code>ColorId</code> of the path passing through it, or <code>null</code> if the cell is empty.</p>
+
+<pre><code><span class="kw">export function</span> <span class="fn">buildOccupancy</span>(state: <span class="ty">GameState</span>): (<span class="ty">ColorId</span> <span class="op">|</span> <span class="ty">null</span>)[][] {
+  <span class="kw">const</span> grid = <span class="ty">Array</span>.<span class="fn">from</span>({ length: state.gridSize }, () =>
+    <span class="kw">new</span> <span class="ty">Array</span>(state.gridSize).<span class="fn">fill</span>(<span class="kw">null</span>)
+  )
+  <span class="kw">for</span> (<span class="kw">const</span> path <span class="kw">of</span> state.paths) {
+    <span class="kw">for</span> (<span class="kw">const</span> cell <span class="kw">of</span> path.cells) {
+      grid[cell.row][cell.col] = path.colorId
+    }
+  }
+  <span class="kw">return</span> grid
+}</code></pre>
+
+    <p>This function is called inside <code>getLegalMoves</code>, <code>checkWin</code>, and the React rendering layer. Because it is pure and creates a fresh array each time, it can be called freely without caching concerns.</p>
+
+    <h3>Time complexity</h3>
+    <p>Building occupancy takes O(P) time where P is the total number of path cells across all colors. For a fully-covered N×N board, P = N², so building occupancy is O(N²). Checking a single cell for occupancy is then O(1).</p>
+  </section>
+
+  <!-- ── Path Drawing ── -->
+  <section id="path-drawing">
+    <h2>Path Drawing</h2>
+    <div class="section-meta"><span class="tag tag-engine">Engine</span> <span class="tag tag-ui">UI</span></div>
+
+    <p>A path is a sequence of cells forming a connected chain from one endpoint to the other. The key design decision: a <code>MoveAction</code> carries the <em>entire new cell list</em> for a color — not an incremental delta. This means the reducer is trivially simple:</p>
+
+<pre><code><span class="kw">export function</span> <span class="fn">applyMove</span>(state: <span class="ty">GameState</span>, action: <span class="ty">MoveAction</span>): <span class="ty">GameState</span> {
+  <span class="cm">// Remove old path for this color, add new one</span>
+  <span class="kw">const</span> newPaths = state.paths.<span class="fn">filter</span>(p => p.colorId <span class="op">!==</span> action.colorId)
+  <span class="kw">if</span> (action.cells.length <span class="op">&gt;</span> <span class="num">0</span>) {
+    newPaths.<span class="fn">push</span>({ colorId: action.colorId, cells: action.cells })
+  }
+  <span class="kw">const</span> newState = { <span class="op">...</span>state, paths: newPaths, moves: state.moves <span class="op">+</span> <span class="num">1</span>, won: <span class="kw">false</span> }
+  newState.won = <span class="fn">checkWin</span>(newState)
+  <span class="kw">return</span> newState
+}</code></pre>
+
+    <p>The drag interaction in the React component builds up the new cell list incrementally — appending cells as the pointer moves — then dispatches a single action per frame via <code>requestAnimationFrame</code>.</p>
+
+    <h3>Backtracking while dragging</h3>
+    <p>When the pointer moves back to the second-to-last cell in the current path, the UI truncates the path by one — this feels like "erasing" the last segment and is implemented by slicing the array: <code>path.cells.slice(0, -1)</code>.</p>
+  </section>
+
+  <!-- ── Win Condition ── -->
+  <section id="win">
+    <h2>Win Condition</h2>
+    <div class="section-meta"><span class="tag tag-engine">Engine</span></div>
+
+    <p>Winning requires two simultaneous conditions to be true:</p>
+    <ol class="steps">
+      <li><span><strong>Every color is connected</strong> — for each color, a path exists whose first cell is one endpoint and last cell is the other.</span></li>
+      <li><span><strong>Full coverage</strong> — every cell in the N×N grid belongs to some path (no nulls in the occupancy grid).</span></li>
+    </ol>
+
+<pre><code><span class="kw">function</span> <span class="fn">checkWin</span>(state: <span class="ty">GameState</span>): <span class="ty">boolean</span> {
+  <span class="kw">const</span> colors = [...<span class="kw">new</span> <span class="ty">Set</span>(state.endpoints.<span class="fn">map</span>(e => e.colorId))]
+  <span class="kw">for</span> (<span class="kw">const</span> color <span class="kw">of</span> colors) {
+    <span class="kw">const</span> path = state.paths.<span class="fn">find</span>(p => p.colorId <span class="op">===</span> color)
+    <span class="kw">if</span> (<span class="op">!</span>path <span class="op">||</span> <span class="op">!</span><span class="fn">isPathComplete</span>(path, state)) <span class="kw">return false</span>
+  }
+  <span class="kw">const</span> occ = <span class="fn">buildOccupancy</span>(state)
+  <span class="kw">let</span> covered = <span class="num">0</span>
+  <span class="kw">for</span> (<span class="kw">let</span> r = <span class="num">0</span>; r <span class="op">&lt;</span> state.gridSize; r++)
+    <span class="kw">for</span> (<span class="kw">let</span> c = <span class="num">0</span>; c <span class="op">&lt;</span> state.gridSize; c++)
+      <span class="kw">if</span> (occ[r][c] <span class="op">!==</span> <span class="kw">null</span>) covered++
+  <span class="kw">return</span> covered <span class="op">===</span> state.gridSize <span class="op">*</span> state.gridSize
+}</code></pre>
+
+    <div class="callout callout-info">
+      <strong>Why check coverage separately?</strong>
+      A player could connect all colors with short direct paths yet leave half the board empty. The coverage check is what forces the satisfying "pipe fills the whole board" constraint — and what makes the puzzle genuinely hard.
+    </div>
+  </section>
+
+  <!-- ── Legal Moves ── -->
+  <section id="legal-moves">
+    <h2>Legal Moves</h2>
+    <div class="section-meta"><span class="tag tag-engine">Engine</span> <span class="tag tag-algo">Algorithm</span></div>
+
+    <p><code>getLegalMoves(state)</code> enumerates every valid next action from the current state. The BFS solver calls this at each node to expand the search frontier.</p>
+
+    <p>For each color, the legal extensions are:</p>
+    <ul style="margin:0 0 14px;padding-left:20px;color:#c9d1d9">
+      <li>Extend from the <strong>head</strong> of the current path to any adjacent empty cell (or the target endpoint)</li>
+      <li>Extend from the <strong>tail</strong> symmetrically</li>
+      <li>Start fresh if no path exists yet, from either endpoint</li>
+    </ul>
+
+    <p>A move is <em>illegal</em> if it would step onto a cell already occupied by a different color, revisit a cell in the same path, or move diagonally. The solver never emits "clear path" actions — clearing increases state space without making progress toward a solution.</p>
+
+    <div class="callout callout-warn">
+      <strong>State explosion</strong>
+      For a 5×5 board with 5 colors the branching factor at each node is roughly 3–4 (each path tip has 3–4 neighbors, minus backtracking). A naive BFS can easily exceed 100k states — set a generous <code>maxStates</code> limit (500k) and accept that very large grids may not be solved interactively.
+    </div>
+  </section>
+
+  <!-- ── BFS Solver ── -->
+  <section id="bfs">
+    <h2>BFS Solver</h2>
+    <div class="section-meta"><span class="tag tag-algo">Algorithm</span></div>
+
+    <p>The solver is game-agnostic: it only calls <code>getLegalMoves</code>, <code>applyMove</code>, and <code>serializeState</code>. This means the same solver module could power any puzzle that exposes those three functions.</p>
+
+<pre><code><span class="kw">export function</span> <span class="fn">solve</span>(
+  initial: <span class="ty">GameState</span>,
+  algorithm: <span class="ty">SolverAlgorithm</span> <span class="op">=</span> <span class="str">'bfs'</span>,
+  maxStates <span class="op">=</span> <span class="num">200_000</span>
+): <span class="ty">SolverResult</span> {
+  <span class="kw">const</span> visited = <span class="kw">new</span> <span class="ty">Set</span>&lt;<span class="ty">string</span>&gt;()
+  <span class="kw">const</span> queue = [{ state: initial, moves: [] }]
+  visited.<span class="fn">add</span>(<span class="fn">serializeState</span>(initial))
+
+  <span class="kw">while</span> (queue.length <span class="op">&gt;</span> <span class="num">0</span>) {
+    <span class="kw">const</span> node = algorithm <span class="op">===</span> <span class="str">'bfs'</span> <span class="op">?</span> queue.<span class="fn">shift</span>() <span class="op">:</span> queue.<span class="fn">pop</span>()
+    <span class="kw">for</span> (<span class="kw">const</span> action <span class="kw">of</span> <span class="fn">getLegalMoves</span>(node.state)) {
+      <span class="kw">if</span> (action.cells.length <span class="op">===</span> <span class="num">0</span>) <span class="kw">continue</span>  <span class="cm">// skip clear-path actions</span>
+      <span class="kw">const</span> next = <span class="fn">applyMove</span>(node.state, action)
+      <span class="kw">const</span> key = <span class="fn">serializeState</span>(next)
+      <span class="kw">if</span> (visited.<span class="fn">has</span>(key)) <span class="kw">continue</span>
+      visited.<span class="fn">add</span>(key)
+      <span class="kw">if</span> (next.won) <span class="kw">return</span> { solved: <span class="kw">true</span>, moves: [...node.moves, action], statesExplored }
+      queue.<span class="fn">push</span>({ state: next, moves: [...node.moves, action] })
+    }
+  }
+  <span class="kw">return</span> { solved: <span class="kw">false</span>, moves: [], statesExplored }
+}</code></pre>
+
+    <h3>BFS vs DFS</h3>
+    <table>
+      <thead><tr><th>Property</th><th>BFS</th><th>DFS</th></tr></thead>
+      <tbody>
+        <tr><td>Guarantees shortest solution?</td><td>Yes</td><td>No</td></tr>
+        <tr><td>Memory usage</td><td>O(b^d) — can be large</td><td>O(d) — small</td></tr>
+        <tr><td>Good for small grids?</td><td>Yes</td><td>Yes</td></tr>
+        <tr><td>Good for large grids?</td><td>May run out of memory</td><td>Finds a solution faster</td></tr>
+      </tbody>
+    </table>
+
+    <h3>serializeState — the deduplication key</h3>
+    <p>The BFS needs to detect when two different search paths arrive at the same game state. <code>serializeState</code> converts the paths into a canonical string by sorting paths by colorId and joining cell coordinates. Two states are identical iff their serializations match.</p>
+
+<pre><code><span class="kw">export function</span> <span class="fn">serializeState</span>(state: <span class="ty">GameState</span>): <span class="ty">string</span> {
+  <span class="kw">return</span> [...state.paths]
+    .<span class="fn">sort</span>((a, b) => a.colorId.<span class="fn">localeCompare</span>(b.colorId))
+    .<span class="fn">map</span>(p => <span class="str">`<span class="id">${p.colorId}</span>:<span class="id">${p.cells.map(c => `${c.row},${c.col}`).join(';')}</span>`</span>)
+    .<span class="fn">join</span>(<span class="str">'|'</span>)
+}</code></pre>
+  </section>
+
+  <!-- ── State Space ── -->
+  <section id="state-space">
+    <h2>State Space Analysis</h2>
+    <div class="section-meta"><span class="tag tag-algo">Algorithm</span></div>
+
+    <p>Flow Free is NP-complete in general: deciding whether a given board is solvable is as hard as solving it, and the state space grows super-polynomially with board size. However, for the small instances used in this implementation (4×4 to 6×6) BFS is practical.</p>
+
+    <h3>Rough estimates</h3>
+    <table>
+      <thead><tr><th>Grid</th><th>Colors</th><th>Cells</th><th>Est. reachable states</th><th>BFS tractable?</th></tr></thead>
+      <tbody>
+        <tr><td>4×4</td><td>3–4</td><td>16</td><td>~10k</td><td>Yes</td></tr>
+        <tr><td>5×5</td><td>4–5</td><td>25</td><td>~100k–500k</td><td>Yes (seconds)</td></tr>
+        <tr><td>6×6</td><td>5–6</td><td>36</td><td>~1M+</td><td>Borderline</td></tr>
+        <tr><td>9×9</td><td>9</td><td>81</td><td>astronomical</td><td>No</td></tr>
+      </tbody>
+    </table>
+
+    <p>The "fill every cell" constraint acts as a natural pruning heuristic: any path arrangement that creates an isolated empty region unreachable from any path head can be immediately discarded. Production Flow Free solvers use constraint propagation (like AC-3 or lookahead) to prune these dead ends without fully exploring them.</p>
+
+    <div class="callout callout-tip">
+      <strong>Hamiltonian path connection</strong>
+      The full-coverage requirement is equivalent to requiring that the union of all paths forms a Hamiltonian cover of the grid graph — visiting every vertex exactly once across all paths. This is why the problem is NP-complete: Hamiltonian path is a classic NP-complete graph problem.
+    </div>
+  </section>
+
+  <!-- ── CS Concepts ── -->
+  <section id="cs-concepts">
+    <h2>CS Concepts Illustrated</h2>
+    <div class="section-meta"><span class="tag tag-algo">Algorithms</span> <span class="tag tag-data">Data Structures</span></div>
+
+    <table>
+      <thead><tr><th>Concept</th><th>Where it appears</th></tr></thead>
+      <tbody>
+        <tr><td><code>Graph search (BFS/DFS)</code></td><td>Solver — the game state graph is explored level-by-level (BFS) or depth-first (DFS)</td></tr>
+        <tr><td><code>Implicit graph</code></td><td>States are generated on demand by <code>getLegalMoves + applyMove</code>; no explicit adjacency list is built</td></tr>
+        <tr><td><code>State deduplication</code></td><td><code>serializeState</code> + a <code>Set&lt;string&gt;</code> prevents revisiting equivalent states</td></tr>
+        <tr><td><code>Immutable state</code></td><td>Every <code>applyMove</code> returns a new object; enables safe BFS path recording without copying large trees</td></tr>
+        <tr><td><code>Constraint satisfaction</code></td><td>Win requires <em>all</em> constraints satisfied simultaneously (each color connected, all cells filled)</td></tr>
+        <tr><td><code>NP-completeness</code></td><td>General Flow Free is NP-complete via reduction from Hamiltonian path on grid graphs</td></tr>
+        <tr><td><code>React useReducer</code></td><td>Game state transitions are pure functions (state, action) → state — the same model as Redux / Elm Architecture</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <!-- ── Testing ── -->
+  <section id="testing">
+    <h2>Testing Strategy</h2>
+    <div class="section-meta"><span class="tag tag-algo">Testing</span></div>
+
+    <p>Two test files cover the implementation at different layers:</p>
+
+    <h3>engine.test.ts — unit tests for pure functions</h3>
+    <p>Every exported function in <code>engine.ts</code> is tested in isolation. The tests verify:</p>
+    <ul style="margin:0 0 14px;padding-left:20px;color:#c9d1d9">
+      <li><code>buildOccupancy</code>: correct cells filled, nulls for empty cells, correct grid dimensions</li>
+      <li><code>getNeighbors</code>: correct count for corners, edges, and center cells; no out-of-bounds results</li>
+      <li><code>applyMove</code>: path replacement, move counter increment, immutability (original unchanged via <code>JSON.stringify</code>), win detection</li>
+      <li><code>serializeState</code>: determinism, order-independence (same state regardless of path array order)</li>
+      <li><code>getLegalMoves</code>: extends paths, never steps on occupied cells of other colors</li>
+    </ul>
+
+    <h3>levels.test.ts — integration tests per level</h3>
+    <p>For each level in <code>LEVELS</code> the test suite checks:</p>
+    <ol class="steps">
+      <li><span>No two path cells overlap at the same (row, col) — each position is unique.</span></li>
+      <li><span>Every color has exactly 2 endpoints.</span></li>
+      <li><span>All endpoints are within the grid bounds.</span></li>
+      <li><span>The BFS solver finds a solution within a generous state limit — if this fails the level is unsolvable as designed.</span></li>
+    </ol>
+
+    <div class="callout callout-info">
+      <strong>Vitest 4 timeout syntax</strong>
+      The solver tests can take several seconds for complex levels. Vitest 4 changed the timeout option position: <code>it(name, &#123; timeout: 30_000 &#125;, fn)</code> — options are the <em>second</em> argument, callback is <em>third</em>. The old <code>it(name, fn, &#123; timeout &#125;)</code> form was removed.
+    </div>
+
+<pre><code><span class="cm">// Correct Vitest 4 syntax:</span>
+<span class="fn">it</span>(<span class="str">`level <span class="id">${i + 1}</span> is solvable`</span>, { timeout: <span class="num">30_000</span> }, () => {
+  <span class="kw">const</span> result = <span class="fn">solve</span>(level, <span class="str">'bfs'</span>, <span class="num">500_000</span>)
+  <span class="fn">expect</span>(result.solved).<span class="fn">toBe</span>(<span class="kw">true</span>)
+})</code></pre>
+  </section>
+
+</main>
+</div>
+
+<script>
+  const links = document.querySelectorAll('nav li a')
+  const sections = document.querySelectorAll('section[id]')
+
+  const observer = new IntersectionObserver(entries => {
+    entries.forEach(entry => {
+      if (entry.isIntersecting) {
+        links.forEach(l => l.classList.remove('active'))
+        const active = document.querySelector(`nav li a[href="#${entry.target.id}"]`)
+        if (active) active.classList.add('active')
+      }
+    })
+  }, { rootMargin: '-20% 0px -70% 0px' })
+
+  sections.forEach(s => observer.observe(s))
+</script>
+</body>
+</html>
