@@ -833,9 +833,9 @@ row 5  [  "vD" ] [  null ] [  "h5" ] [  "h5" ] [  "h5" ] [  null ]</div>
     <h3>The approach: decouple visual state from committed state</h3>
 
     <ol class="steps">
-      <li><strong>pointerdown</strong> — Record the drag start position, compute <code>{ min, max }</code> once via <code>getMovableRange</code>, store everything in a <code>useRef</code> (no re-render).</li>
-      <li><strong>pointermove</strong> — Calculate the raw pixel delta, convert to cell delta, clamp to legal range. If the cell delta changed, schedule a <code>requestAnimationFrame</code> to update visual state. Skip if a frame is already queued.</li>
-      <li><strong>pointerup</strong> — Cancel any pending frame, commit the final delta by calling <code>onMove</code> (which dispatches to the reducer).</li>
+      <li><span><strong>pointerdown</strong> — Record the drag start position, compute <code>{ min, max }</code> once via <code>getMovableRange</code>, store everything in a <code>useRef</code> (no re-render).</span></li>
+      <li><span><strong>pointermove</strong> — Calculate the raw pixel delta, convert to cell delta, clamp to legal range. If the cell delta changed, schedule a <code>requestAnimationFrame</code> to update visual state. Skip if a frame is already queued.</span></li>
+      <li><span><strong>pointerup</strong> — Cancel any pending frame, commit the final delta by calling <code>onMove</code> (which dispatches to the reducer).</span></li>
     </ol>
 
 <pre><span class="kw">const</span> handlePointerMove = <span class="fn">useCallback</span>((e: <span class="ty">React.PointerEvent</span>) => {
