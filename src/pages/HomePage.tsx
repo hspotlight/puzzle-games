@@ -17,11 +17,11 @@ const GAMES: GameCard[] = [
     available: true,
   },
   {
-    title: 'More Games',
-    description: 'Coming soon…',
-    path: '#',
-    emoji: '🕹️',
-    available: false,
+    title: '8-Puzzle',
+    description: 'Slide 8 tiles into order on a 3×3 grid — the classic sliding puzzle.',
+    path: '/sliding-puzzle',
+    emoji: '🔢',
+    available: true,
   },
 ]
 

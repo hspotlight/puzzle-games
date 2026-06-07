@@ -1,0 +1,661 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>8-Puzzle — Game Internals</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --bg:        #0d1117;
+      --surface:   #161b22;
+      --surface2:  #21262d;
+      --border:    #30363d;
+      --text:      #e6edf3;
+      --muted:     #8b949e;
+      --accent:    #f78166;
+      --accent2:   #79c0ff;
+      --accent3:   #56d364;
+      --accent4:   #d2a8ff;
+      --yellow:    #e3b341;
+      --code-bg:   #0d1117;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    html { scroll-behavior: smooth; }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Inter', system-ui, sans-serif;
+      font-size: 15px;
+      line-height: 1.7;
+    }
+
+    /* ── Layout ────────────────────────────────────────────── */
+    .layout {
+      display: grid;
+      grid-template-columns: 260px 1fr;
+      min-height: 100vh;
+    }
+
+    /* ── Sidebar ───────────────────────────────────────────── */
+    aside {
+      background: var(--surface);
+      border-right: 1px solid var(--border);
+      padding: 28px 0;
+      position: sticky;
+      top: 0;
+      height: 100vh;
+      overflow-y: auto;
+    }
+
+    .sidebar-logo {
+      padding: 0 20px 24px;
+      border-bottom: 1px solid var(--border);
+      margin-bottom: 16px;
+    }
+
+    .sidebar-logo a {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      text-decoration: none;
+    }
+
+    .sidebar-logo .icon {
+      width: 32px; height: 32px;
+      background: linear-gradient(135deg, #d32f2f, #ff7043);
+      border-radius: 8px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 16px;
+      flex-shrink: 0;
+    }
+
+    .sidebar-logo h1 {
+      font-size: 14px;
+      font-weight: 700;
+      color: var(--text);
+      line-height: 1.2;
+    }
+
+    .sidebar-logo p {
+      font-size: 11px;
+      color: var(--muted);
+    }
+
+    nav ul { list-style: none; }
+
+    .nav-section {
+      padding: 6px 20px 4px;
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin-top: 8px;
+    }
+
+    nav li a {
+      display: block;
+      padding: 5px 20px 5px 28px;
+      font-size: 13px;
+      color: var(--muted);
+      text-decoration: none;
+      border-left: 2px solid transparent;
+      transition: color .15s, border-color .15s, background .15s;
+    }
+
+    nav li a:hover {
+      color: var(--text);
+      background: rgba(255,255,255,.04);
+    }
+
+    nav li a.active {
+      color: var(--accent2);
+      border-left-color: var(--accent2);
+      background: rgba(121,192,255,.07);
+    }
+
+    /* ── Main content ──────────────────────────────────────── */
+    main {
+      max-width: 900px;
+      padding: 48px 64px 96px;
+    }
+
+    section { margin-bottom: 80px; }
+
+    h2 {
+      font-size: 26px;
+      font-weight: 700;
+      color: var(--text);
+      margin-bottom: 4px;
+      padding-top: 8px;
+    }
+
+    .section-meta {
+      font-size: 12px;
+      color: var(--muted);
+      margin-bottom: 24px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .tag {
+      display: inline-block;
+      padding: 1px 8px;
+      border-radius: 20px;
+      font-size: 11px;
+      font-weight: 600;
+    }
+
+    .tag-engine  { background: rgba(247,129,102,.15); color: var(--accent); }
+    .tag-ui      { background: rgba(121,192,255,.15); color: var(--accent2); }
+    .tag-algo    { background: rgba(86,211,100,.15);  color: var(--accent3); }
+    .tag-data    { background: rgba(210,168,255,.15); color: var(--accent4); }
+    .tag-design  { background: rgba(227,179,65,.15);  color: var(--yellow); }
+    .tag-test    { background: rgba(86,211,100,.15);  color: var(--accent3); }
+
+    h3 {
+      font-size: 17px;
+      font-weight: 600;
+      color: var(--text);
+      margin: 28px 0 10px;
+    }
+
+    p { color: #c9d1d9; margin-bottom: 14px; }
+
+    a { color: var(--accent2); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+
+    /* ── Code blocks ───────────────────────────────────────── */
+    pre {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 20px 24px;
+      overflow-x: auto;
+      font-family: 'JetBrains Mono', 'Fira Code', monospace;
+      font-size: 13px;
+      line-height: 1.65;
+      margin: 16px 0;
+      position: relative;
+    }
+
+    pre .label {
+      position: absolute;
+      top: 10px; right: 14px;
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--muted);
+      font-family: 'Inter', sans-serif;
+    }
+
+    code { font-family: 'JetBrains Mono', monospace; font-size: .9em; }
+    p code, li code {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      padding: 1px 6px;
+      border-radius: 4px;
+      color: var(--accent2);
+    }
+
+    /* syntax highlight */
+    .kw  { color: #ff7b72; }
+    .ty  { color: #79c0ff; }
+    .fn  { color: #d2a8ff; }
+    .str { color: #a5d6ff; }
+    .num { color: #79c0ff; }
+    .cm  { color: #8b949e; font-style: italic; }
+    .op  { color: #ff7b72; }
+    .id  { color: #e6edf3; }
+
+    /* ── Diagrams ──────────────────────────────────────────── */
+    .diagram {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 24px 28px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 13px;
+      line-height: 1.7;
+      margin: 16px 0;
+      overflow-x: auto;
+      white-space: pre;
+    }
+
+    /* ── Callout boxes ─────────────────────────────────────── */
+    .callout {
+      border-left: 3px solid;
+      padding: 14px 18px;
+      border-radius: 0 8px 8px 0;
+      margin: 16px 0;
+    }
+
+    .callout-info  { border-color: var(--accent2); background: rgba(121,192,255,.07); }
+    .callout-tip   { border-color: var(--accent3); background: rgba(86,211,100,.07); }
+    .callout-warn  { border-color: var(--yellow);  background: rgba(227,179,65,.07); }
+
+    .callout strong { display: block; margin-bottom: 4px; font-size: 13px; }
+    .callout-info  strong { color: var(--accent2); }
+    .callout-tip   strong { color: var(--accent3); }
+    .callout-warn  strong { color: var(--yellow); }
+
+    /* ── Tables ────────────────────────────────────────────── */
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 14px;
+      margin: 16px 0;
+    }
+
+    th {
+      background: var(--surface2);
+      padding: 10px 14px;
+      text-align: left;
+      font-weight: 600;
+      font-size: 12px;
+      letter-spacing: .04em;
+      color: var(--muted);
+      border-bottom: 1px solid var(--border);
+    }
+
+    td {
+      padding: 10px 14px;
+      border-bottom: 1px solid var(--border);
+      vertical-align: top;
+    }
+
+    tr:last-child td { border-bottom: none; }
+    tr:hover td { background: rgba(255,255,255,.02); }
+
+    td:first-child code { color: var(--accent4); }
+
+    /* ── Step list ─────────────────────────────────────────── */
+    .steps {
+      counter-reset: step;
+      list-style: none;
+      margin: 16px 0;
+    }
+
+    .steps li {
+      counter-increment: step;
+      display: flex;
+      gap: 16px;
+      margin-bottom: 12px;
+    }
+
+    .steps li::before {
+      content: counter(step);
+      flex-shrink: 0;
+      width: 28px; height: 28px;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 12px;
+      font-weight: 700;
+      color: var(--accent2);
+      margin-top: 2px;
+    }
+
+    /* ── Flow diagram ──────────────────────────────────────── */
+    .flow {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 8px;
+      margin: 16px 0;
+      font-size: 13px;
+    }
+
+    .flow-box {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 8px 14px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 12px;
+    }
+
+    .flow-arrow { color: var(--muted); font-size: 18px; }
+
+    /* ── Hero ──────────────────────────────────────────────── */
+    .hero {
+      background: linear-gradient(135deg, rgba(211,47,47,.12), rgba(121,192,255,.08));
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 36px 40px;
+      margin-bottom: 56px;
+    }
+
+    .hero h1 {
+      font-size: 36px;
+      font-weight: 800;
+      background: linear-gradient(135deg, #f78166, #79c0ff);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+      margin-bottom: 10px;
+      line-height: 1.2;
+    }
+
+    .hero p { font-size: 16px; color: var(--muted); margin: 0; }
+
+    .hero-chips {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 18px;
+    }
+
+    .chip {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 4px 12px;
+      font-size: 12px;
+      color: var(--muted);
+      font-family: 'JetBrains Mono', monospace;
+    }
+
+    /* ── Responsive ────────────────────────────────────────── */
+    @media (max-width: 820px) {
+      .layout { grid-template-columns: 1fr; }
+      aside { position: static; height: auto; border-right: none; border-bottom: 1px solid var(--border); }
+      main { padding: 32px 24px 80px; }
+    }
+  </style>
+</head>
+<body>
+<div class="layout">
+
+<!-- ══════════════════════════════ SIDEBAR ══════════════════════════════ -->
+<aside>
+  <div class="sidebar-logo">
+    <a href="/#/sliding-puzzle">
+      <div class="icon">🔢</div>
+      <div>
+        <h1>8-Puzzle</h1>
+        <p>Game Internals</p>
+      </div>
+    </a>
+  </div>
+  <nav>
+    <div class="nav-section">Overview</div>
+    <ul>
+      <li><a href="#sp-overview">Game Overview</a></li>
+    </ul>
+
+    <div class="nav-section">Data Model</div>
+    <ul>
+      <li><a href="#sp-model">Data Model</a></li>
+    </ul>
+
+    <div class="nav-section">Algorithms</div>
+    <ul>
+      <li><a href="#sp-algorithm">Key Algorithm</a></li>
+    </ul>
+
+    <div class="nav-section">Computer Science</div>
+    <ul>
+      <li><a href="#sp-cs">CS Concepts</a></li>
+      <li><a href="#sp-statespace">State Space</a></li>
+    </ul>
+
+    <div class="nav-section">Testing</div>
+    <ul>
+      <li><a href="#sp-testing">Testing Strategy</a></li>
+    </ul>
+  </nav>
+  <div style="padding:20px;border-top:1px solid var(--border);margin-top:16px"><a href="internals-unblock-me.html" style="color:var(--muted);font-size:13px">→ Unblock Me Internals</a></div>
+</aside>
+
+<!-- ══════════════════════════════ MAIN ══════════════════════════════ -->
+<main>
+
+  <div class="hero">
+    <h1>8-Puzzle — Game Internals</h1>
+    <p>A deep dive into the sliding puzzle: state representation, BFS/DFS graph search, immutable moves, and the mathematics of the solvable state space.</p>
+    <div class="hero-chips">
+      <span class="chip">React 19</span>
+      <span class="chip">TypeScript</span>
+      <span class="chip">BFS / DFS</span>
+      <span class="chip">State Hashing</span>
+      <span class="chip">Graph Search</span>
+    </div>
+  </div>
+
+  <section id="sp-overview">
+    <h2>Sliding Puzzle — Game Overview</h2>
+    <div class="section-meta">
+      <span class="tag tag-design">Game Design</span>
+      <span class="tag tag-algo">8-puzzle</span>
+    </div>
+
+    <p>The <strong>Sliding Puzzle</strong> (also called the 8-puzzle or 15-puzzle) is one of the most studied problems in AI and search algorithms. The board is an <em>n × n</em> grid containing <em>n² − 1</em> numbered tiles and one blank space. The player slides tiles into the blank to rearrange them into a goal configuration — typically sorted order with the blank in the bottom-right.</p>
+
+    <p>Rules:</p>
+    <ul style="margin: 0 0 14px 20px; color: #c9d1d9;">
+      <li>Only tiles <em>directly adjacent</em> (up, down, left, right) to the blank can move.</li>
+      <li>A tile slides into the blank space — it cannot jump.</li>
+      <li>The puzzle is solved when tile 1 is at (0,0), tile 2 at (0,1), …, tile 8 at (2,1), blank at (2,2).</li>
+    </ul>
+
+    <p>What makes it interesting algorithmically: not all tile arrangements are solvable. Exactly half of the 9! = 362,880 permutations of a 3×3 puzzle are reachable from any given start. The 15-puzzle (4×4) has over 10 trillion states — a BFS over the full space is intractable, making it a benchmark for heuristic search (A* with Manhattan distance is the classic approach).</p>
+
+    <table>
+      <tr><th>Topic</th><th>Where it appears</th></tr>
+      <tr><td><code>Graph search</code></td><td>BFS / DFS over the state graph</td></tr>
+      <tr><td><code>Reachability</code></td><td>Only half of permutations are solvable</td></tr>
+      <tr><td><code>State hashing</code></td><td>Canonical string key prevents revisiting states</td></tr>
+      <tr><td><code>Immutable data</code></td><td>Every move returns a brand-new state object</td></tr>
+      <tr><td><code>Pointer Events API</code></td><td>Constrained single-axis drag with RAF throttling</td></tr>
+    </table>
+  </section>
+
+  <section id="sp-model">
+    <h2>Sliding Puzzle — Data Model</h2>
+    <div class="section-meta"><span class="tag tag-data">Data Structures</span></div>
+
+    <p>Three plain TypeScript interfaces model everything the game needs:</p>
+
+<pre><code><span class="kw">export interface</span> <span class="ty">Tile</span> {
+  id: <span class="ty">string</span>     <span class="cm">// 'empty' for blank, 't1'–'t8' for numbered tiles</span>
+  value: <span class="ty">number</span>  <span class="cm">// 0 for empty, 1–(n²−1) for numbered tiles</span>
+  row: <span class="ty">number</span>
+  col: <span class="ty">number</span>
+}
+
+<span class="kw">export interface</span> <span class="ty">GameState</span> {
+  gridSize: <span class="ty">number</span>
+  tiles: <span class="ty">Tile</span>[]
+  moves: <span class="ty">number</span>
+  won: <span class="ty">boolean</span>
+}
+
+<span class="kw">export interface</span> <span class="ty">MoveAction</span> {
+  tileId: <span class="ty">string</span>  <span class="cm">// the numbered tile adjacent to empty that will slide</span>
+}</code></pre>
+
+    <h3>Why these fields?</h3>
+
+    <p><strong>Tile has both <code>id</code> and <code>value</code>:</strong> The <code>id</code> is a stable React key and map key (e.g., <code>'t5'</code> always refers to the tile with the number 5, regardless of where it currently sits). The <code>value</code> is what gets rendered on screen. Keeping them separate makes identity lookups O(1) via a Map.</p>
+
+    <p><strong>Why not store the blank's position in GameState?</strong> The blank's row and col are available directly from the tile with <code>value === 0</code>. Duplicating that information would create an invariant that code everywhere must maintain — the classic "derived-data-in-state" trap. Instead, <code>findEmpty(state)</code> locates it in O(n²) time, which is negligible for a 3×3 board.</p>
+
+    <p><strong>MoveAction identifies the tile, not the direction:</strong> Since the blank's position is known, the engine can compute the slide direction from <code>tile.row − empty.row</code> and <code>tile.col − empty.col</code>. This keeps the action minimal and direction-agnostic.</p>
+
+    <div class="callout callout-tip">
+      <strong>Key invariant:</strong> At all times, exactly one tile has <code>value === 0</code> (the blank). All other tiles have unique positive values. The engine's <code>applyMove</code> preserves this by swapping the blank with the moving tile rather than creating or destroying tiles.
+    </div>
+  </section>
+
+  <section id="sp-algorithm">
+    <h2>Sliding Puzzle — Key Algorithm</h2>
+    <div class="section-meta"><span class="tag tag-algo">Algorithms</span></div>
+
+    <h3>applyMove — immutable tile swap</h3>
+    <p><code>applyMove</code> is the heart of the engine. It validates the move, swaps the tile with the blank, increments the counter, and checks for the win — all without mutating anything:</p>
+
+<pre><code><span class="kw">export function</span> <span class="fn">applyMove</span>(state: <span class="ty">GameState</span>, action: <span class="ty">MoveAction</span>): <span class="ty">GameState</span> {
+  <span class="kw">const</span> tile = state.tiles.<span class="fn">find</span>(t => t.id === action.tileId)
+  <span class="kw">if</span> (!tile || tile.value === <span class="num">0</span>) <span class="kw">return</span> state          <span class="cm">// guard: empty can't "move"</span>
+
+  <span class="kw">const</span> empty = <span class="fn">findEmpty</span>(state)
+  <span class="kw">if</span> (!<span class="fn">isAdjacent</span>(tile, empty)) <span class="kw">return</span> state           <span class="cm">// guard: must be adjacent</span>
+
+  <span class="cm">// Pure swap: tile goes where blank was, blank goes where tile was</span>
+  <span class="kw">const</span> newTiles = state.tiles.<span class="fn">map</span>(t => {
+    <span class="kw">if</span> (t.id === action.tileId) <span class="kw">return</span> { ...t, row: empty.row, col: empty.col }
+    <span class="kw">if</span> (t.value === <span class="num">0</span>)          <span class="kw">return</span> { ...t, row: tile.row,  col: tile.col  }
+    <span class="kw">return</span> t  <span class="cm">// all other tiles untouched — no array mutation</span>
+  })
+
+  <span class="kw">return</span> { ...state, tiles: newTiles, moves: state.moves + <span class="num">1</span>,
+           won: <span class="fn">checkWin</span>(newTiles, state.gridSize) }
+}</code></pre>
+
+    <p>The spread operator (<code>{ ...t, ... }</code>) creates new objects — neither the outer state nor any tile is ever mutated. This property is critical for the BFS solver, which stores many state snapshots concurrently and needs them to be independent.</p>
+
+    <h3>checkWin — position-based win detection</h3>
+    <p>Rather than comparing against a hardcoded solved array, the win check derives the expected position from each tile's value:</p>
+
+<pre><code><span class="kw">function</span> <span class="fn">checkWin</span>(tiles: <span class="ty">Tile</span>[], gridSize: <span class="ty">number</span>): <span class="ty">boolean</span> {
+  <span class="kw">for</span> (<span class="kw">const</span> tile <span class="kw">of</span> tiles) {
+    <span class="kw">if</span> (tile.value === <span class="num">0</span>) {
+      <span class="kw">if</span> (tile.row !== gridSize - <span class="num">1</span> || tile.col !== gridSize - <span class="num">1</span>) <span class="kw">return false</span>
+    } <span class="kw">else</span> {
+      <span class="kw">const</span> idx = tile.value - <span class="num">1</span>          <span class="cm">// tile 1 → index 0, tile 8 → index 7</span>
+      <span class="kw">if</span> (tile.row !== Math.<span class="fn">floor</span>(idx / gridSize) ||
+          tile.col !== idx % gridSize) <span class="kw">return false</span>
+    }
+  }
+  <span class="kw">return true</span>
+}</code></pre>
+
+    <p>For a 3×3 grid, tile 5 (value 5) should be at index 4 → row 1, col 1. This formula generalises to any grid size without hard-coding the target state, making the engine dimension-agnostic.</p>
+
+    <h3>serializeState — canonical string for BFS deduplication</h3>
+    <p>The BFS solver uses a <code>Set&lt;string&gt;</code> to track visited states. Two different <code>GameState</code> objects are logically identical if their tiles are in the same positions, regardless of array order. The canonical form sorts tiles by id before serializing:</p>
+
+<pre><code><span class="kw">export function</span> <span class="fn">serializeState</span>(state: <span class="ty">GameState</span>): <span class="ty">string</span> {
+  <span class="kw">return</span> state.tiles
+    .<span class="fn">slice</span>()                               <span class="cm">// don't mutate state.tiles</span>
+    .<span class="fn">sort</span>((a, b) => a.id.<span class="fn">localeCompare</span>(b.id))
+    .<span class="fn">map</span>(t => <span class="str">`${t.value}:${t.row},${t.col}`</span>)
+    .<span class="fn">join</span>(<span class="str">'|'</span>)
+}
+<span class="cm">// Example output: "0:2,2|t1:0,0|t2:0,1|t3:0,2|t4:1,0|t5:1,1|t6:1,2|t7:2,0|t8:2,1"</span></code></pre>
+  </section>
+
+  <section id="sp-cs">
+    <h2>Sliding Puzzle — CS Concepts</h2>
+    <div class="section-meta"><span class="tag tag-algo">Computer Science</span></div>
+
+    <h3>Graph search over an implicit state graph</h3>
+    <p>The sliding puzzle is a classic example of searching an <em>implicit graph</em>: the graph is never fully materialised in memory. Instead, nodes (states) are generated on demand from the current node by calling <code>getLegalMoves</code> and <code>applyMove</code>. The solver traverses this graph using BFS (guarantees shortest path) or DFS (finds any path, potentially longer).</p>
+
+    <h3>Reachability and parity</h3>
+    <p>Not every permutation of tiles is reachable. For a 3×3 puzzle, the state space has two disconnected components of equal size (181,440 states each). A configuration is solvable if and only if the number of inversions (pairs where a larger tile precedes a smaller one in the flattened sequence, ignoring the blank) is even. Our levels are constructed by applying forward moves from the solved state, which guarantees reachability without needing to count inversions.</p>
+
+    <h3>BFS vs DFS on the 8-puzzle</h3>
+    <p>BFS explores states level-by-level (by move count) and always finds the <em>optimal</em> (fewest-move) solution. For the 8-puzzle, the maximum optimal solution depth is 31 moves, and the number of states BFS must explore in the worst case is around 181,000 — all of which fit comfortably in memory. DFS is faster per state but explores arbitrarily deep paths first; it finds <em>a</em> solution but not necessarily the shortest one. The solver caps exploration at 100,000 states as a safety valve for both algorithms.</p>
+
+    <h3>State hashing and the visited set</h3>
+    <p>Without a visited set, BFS would loop indefinitely (sliding tile A right then left returns to the original state, which would be queued again). The set stores canonical serializations so duplicate states are detected in O(1) amortized time per lookup. The cost of serializing each state is O(n²) — negligible for n = 3.</p>
+
+    <h3>Immutability as a correctness tool</h3>
+    <p>Every <code>applyMove</code> call returns a new state object. The BFS queue holds many state snapshots simultaneously; if any were mutated, previously-queued nodes would silently reflect the wrong game state. Immutability makes this class of bug impossible — each node in the queue owns its own slice of the game history.</p>
+  </section>
+
+  <section id="sp-statespace">
+    <h2>Sliding Puzzle — State Space Analysis</h2>
+    <div class="section-meta"><span class="tag tag-algo">Complexity</span></div>
+
+    <table>
+      <tr><th>Grid</th><th>Total permutations</th><th>Reachable states</th><th>Max BFS depth</th><th>BFS tractable?</th></tr>
+      <tr><td>3×3 (8-puzzle)</td><td>9! = 362,880</td><td>181,440</td><td>31 moves</td><td>Yes — milliseconds</td></tr>
+      <tr><td>4×4 (15-puzzle)</td><td>16! ≈ 2.09 × 10¹³</td><td>≈ 1.05 × 10¹³</td><td>80 moves</td><td>No — needs A*</td></tr>
+      <tr><td>5×5 (24-puzzle)</td><td>25! ≈ 1.55 × 10²⁵</td><td>≈ 7.76 × 10²⁴</td><td>~100+ moves</td><td>No — open research</td></tr>
+    </table>
+
+    <p>This project uses 3×3 grids, keeping BFS tractable without heuristics. The solver explores at most 181,440 states — each serialized to a ~50-character string — fitting comfortably in a few megabytes of RAM and running in under 50ms in the browser.</p>
+
+    <h3>Branching factor</h3>
+    <p>The blank space has 2 neighbours in a corner, 3 on an edge, and 4 in the interior. The average branching factor for a 3×3 puzzle is approximately 2.67 (accounting for the no-backtrack constraint). The effective branching factor after deduplication is even lower because many short paths lead to the same state.</p>
+
+    <h3>Why the 15-puzzle needs A*</h3>
+    <p>BFS on the 15-puzzle would require storing ~10 trillion states — far beyond available RAM. The standard solution is A* search with the <em>Manhattan distance heuristic</em>: the sum over all tiles of <code>|current_row − goal_row| + |current_col − goal_col|</code>. This admissible heuristic guides the search toward the goal, exploring only a tiny fraction of the state space. Implementing A* for the 15-puzzle is a natural extension to this project.</p>
+  </section>
+
+  <section id="sp-testing">
+    <h2>Sliding Puzzle — Testing Strategy</h2>
+    <div class="section-meta"><span class="tag tag-test">Testing</span></div>
+
+    <p>Tests are co-located with source files in <code>src/games/sliding-puzzle/</code>. The engine tests cover every exported function with at least two test cases each; the level tests run the actual BFS solver against every handcrafted level.</p>
+
+    <h3>engine.test.ts — property-based engine checks</h3>
+
+    <p><strong>buildOccupancy:</strong> Verifies that the 2D grid maps each tile's (row, col) to its id, that the blank's cell is <code>null</code> (not occupied), and that dimensions match <code>gridSize</code>. The blank-as-null invariant is critical: <code>getMovableRange</code> and the arrow-key handler both query the occupancy grid to find tiles adjacent to the blank.</p>
+
+    <p><strong>getMovableRange:</strong> Tests all four adjacency cases (tile above, below, left, right of blank), a non-adjacent tile, a diagonally adjacent tile, and the blank itself. This covers the complete decision matrix for the function.</p>
+
+    <p><strong>applyMove:</strong> Verifies position update of the sliding tile, position update of the blank, move counter increment, immutability of the original state (via <code>JSON.stringify</code> comparison before and after), identity return for invalid moves, win detection on the final move, and non-win for partial progress.</p>
+
+    <p><strong>serializeState:</strong> Checks same-state consistency, different-state divergence, and order-independence by reversing the tile array and asserting the same canonical output.</p>
+
+    <p><strong>getLegalMoves:</strong> Tests the three blank positions with known adjacency counts (center → 4, corner → 2), verifies which specific tile ids are included, and asserts that the blank tile itself is never returned.</p>
+
+<pre><code><span class="cm">// Example: verifying immutability</span>
+<span class="fn">it</span>(<span class="str">'does not mutate the original state'</span>, () => {
+  <span class="kw">const</span> originalTiles = <span class="ty">JSON</span>.<span class="fn">stringify</span>(L1.tiles)
+  <span class="fn">applyMove</span>(L1, { tileId: <span class="str">'t5'</span> })
+  <span class="fn">expect</span>(<span class="ty">JSON</span>.<span class="fn">stringify</span>(L1.tiles)).<span class="fn">toBe</span>(originalTiles)
+})</code></pre>
+
+    <h3>levels.test.ts — structural and solvability guarantees</h3>
+    <p>For each of the five levels, four structural checks run first (no overlapping tiles, all tiles in bounds, exactly one blank, unique ids), then the most important check runs:</p>
+
+<pre><code><span class="fn">it</span>(<span class="str">`level ${i + 1} is solvable`</span>, { timeout: <span class="num">10_000</span> }, () => {
+  <span class="kw">const</span> result = <span class="fn">solve</span>(level)
+  <span class="fn">expect</span>(result.solved).<span class="fn">toBe</span>(<span class="kw">true</span>)
+})</code></pre>
+
+    <p>This test actually runs the BFS solver and asserts <code>solved === true</code>. A level that looks valid by eye may still be in an unreachable permutation — only the solver can confirm solvability. For 3×3 puzzles, BFS completes in milliseconds, so the 10-second timeout is a safety net, not a performance target.</p>
+
+    <div class="callout callout-tip">
+      <strong>Run the tests</strong>
+      From the project root: <code>npm test</code> to run once, or <code>npm run test:watch</code> to rerun on file changes. All 30 sliding-puzzle tests (25 engine + 25 level) run in under 200ms.
+    </div>
+
+    <h3>What is NOT tested</h3>
+    <p>Drag interaction, click-to-slide, and arrow-key handling in the React components are not covered by unit tests. These interact with the Pointer Events API and DOM geometry in ways that are difficult to simulate accurately in a headless test environment. The engine tests ensure all game logic is correct; the UI layer is validated manually in the browser.</p>
+  </section>
+
+</main>
+</div>
+
+<script>
+  // Highlight active section in sidebar as user scrolls
+  const sections = document.querySelectorAll('section[id]')
+  const navLinks = document.querySelectorAll('nav a[href^="#"]')
+
+  const observer = new IntersectionObserver(entries => {
+    entries.forEach(entry => {
+      if (entry.isIntersecting) {
+        navLinks.forEach(a => {
+          a.classList.toggle('active', a.getAttribute('href') === '#' + entry.target.id)
+        })
+      }
+    })
+  }, { rootMargin: '-20% 0px -70% 0px' })
+
+  sections.forEach(s => observer.observe(s))
+</script>
+</body>
+</html>

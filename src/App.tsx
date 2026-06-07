@@ -3,6 +3,7 @@ import { HashRouter, Routes, Route, Link } from 'react-router-dom'
 
 const HomePage = lazy(() => import('./pages/HomePage').then(m => ({ default: m.HomePage })))
 const UnblockMe = lazy(() => import('./games/unblock-me/UnblockMe').then(m => ({ default: m.UnblockMe })))
+const SlidingPuzzle = lazy(() => import('./games/sliding-puzzle/SlidingPuzzle').then(m => ({ default: m.SlidingPuzzle })))
 
 function Loading() {
   return (
@@ -30,13 +31,24 @@ function NavBar() {
       <Link to="/unblock-me" style={{ color: '#bcaaa4', textDecoration: 'none', fontSize: 14 }}>
         Unblock Me
       </Link>
+      <Link to="/sliding-puzzle" style={{ color: '#bcaaa4', textDecoration: 'none', fontSize: 14 }}>
+        8-Puzzle
+      </Link>
       <a
-        href={`${import.meta.env.BASE_URL}internals.html`}
+        href={`${import.meta.env.BASE_URL}internals-unblock-me.html`}
         target="_blank"
         rel="noopener noreferrer"
         style={{ color: '#bcaaa4', textDecoration: 'none', fontSize: 14, marginLeft: 'auto' }}
       >
-        📖 How It Works
+        📖 Unblock Me Internals
+      </a>
+      <a
+        href={`${import.meta.env.BASE_URL}internals-8-puzzle.html`}
+        target="_blank"
+        rel="noopener noreferrer"
+        style={{ color: '#bcaaa4', textDecoration: 'none', fontSize: 14 }}
+      >
+        📖 8-Puzzle Internals
       </a>
     </nav>
   )
@@ -51,6 +63,7 @@ export default function App() {
           <Routes>
             <Route path="/" element={<HomePage />} />
             <Route path="/unblock-me" element={<UnblockMe />} />
+            <Route path="/sliding-puzzle" element={<SlidingPuzzle />} />
           </Routes>
         </Suspense>
       </div>
