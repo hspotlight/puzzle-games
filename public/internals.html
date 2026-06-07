@@ -589,6 +589,16 @@
   delta:   <span class="ty">number</span>        <span class="cm">// positive = right/down; negative = left/up</span>
 }</pre>
 
+    <div class="callout callout-info">
+      <strong>Isn't <code>isTarget</code> redundant with <code>id: 'target'</code>?</strong>
+      Not quite. The <code>id</code> is an opaque key used for occupancy map entries and <code>MoveAction.blockId</code>. The engine never hard-codes the string <code>'target'</code> — it queries <code>blocks.find(b =&gt; b.isTarget)</code> to locate the red block. If a level generator assigned a different id to the red block, win detection and rendering would still work correctly. The redundancy is intentional: <code>isTarget</code> carries semantic meaning that the type system can enforce, while <code>id</code> is just an identity key.
+    </div>
+
+    <div class="callout callout-warn">
+      <strong>Why isn't minimum move count stored in <code>GameState</code>?</strong>
+      <code>GameState.moves</code> tracks the player's actual move count. The <em>optimal</em> (minimum) move count is not stored because it is derived — calling <code>solve(state, 'bfs').moves.length</code> from <code>solver.ts</code> gives the answer. Pre-computing it for every state inside the BFS inner loop would require a BFS-within-BFS (extremely expensive). Instead it's computed once on demand when the player clicks "Solve" in <code>SolverPanel</code>.
+    </div>
+
     <h3>Coordinate System</h3>
     <p>Row and col are both 0-indexed, measured from the top-left. A horizontal block at <code>{row:2, col:1, length:3}</code> occupies cells (2,1), (2,2), (2,3).</p>
 
@@ -630,6 +640,11 @@ row 5  [ ]    [ ]    [ ]    [ ]    [ ]    [ ]</div>
       A 2D array gives O(1) cell lookup — <code>grid[r][c]</code>. A Set of strings like <code>"2,3"</code> would be O(1) average too, but indexing an array is faster in practice because there's no string allocation or hash computation on every access.
     </div>
 
+    <div class="callout callout-tip">
+      <strong>Why <code>null</code> for empty cells, not <code>""</code>?</strong>
+      <code>null</code> is the idiomatic TypeScript "no value" — the return type <code>(string | null)[][]</code> makes intent explicit at the type level. An empty string <code>""</code> is a valid <code>string</code>, which means a block whose id happened to be <code>""</code> would silently collide with "empty" in equality checks. <code>null</code> cannot be confused with any block id.
+    </div>
+
     <h3>Visual example — Level 1</h3>
     <p>After calling <code>buildOccupancy</code> on Level 1, the grid looks like this. Each cell contains either <code>null</code> (empty) or the block id occupying it.</p>
 
@@ -642,6 +657,11 @@ row 4  [  "vD" ] [  "hC" ] [  "hC" ] [  null ] [  null ] [  null ]
 row 5  [  "vD" ] [  null ] [  "h5" ] [  "h5" ] [  "h5" ] [  null ]</div>
 
     <p>The target block (red) is at row 2, cols 0–1. To exit right, it needs cols 2, 3, 4, 5 to be free. Currently vA blocks col 2, and vB blocks col 4.</p>
+
+    <div class="callout callout-warn">
+      <strong>Why isn't the occupancy grid stored in <code>GameState</code>?</strong>
+      The grid is <em>derived data</em> — always computable from <code>blocks[]</code>. Storing it in state would mean every <code>applyMove</code> must update both <code>blocks</code> and the grid, and the two could silently diverge (a class of subtle bug). The BFS serialiser (<code>serializeState</code>) would also need to skip the grid field. Instead, the grid is rebuilt on demand. In the React UI, <code>Grid.tsx</code> caches it with <code>useMemo(() =&gt; buildOccupancy(state), [state])</code> and passes the cached result as the optional third argument to <code>getMovableRange</code> — so it is only rebuilt once per state change, not once per drag event.
+    </div>
   </section>
 
   <!-- ── LEVELS ────────────────────────────────────────────────────── -->
@@ -689,8 +709,17 @@ row 5  [  "vD" ] [  null ] [  "h5" ] [  "h5" ] [  "h5" ] [  null ]</div>
     <h3>Step 1 — getMovableRange()</h3>
     <p>Before applying any move, the engine calculates how far a block <em>can</em> travel in each direction. It scans outward from the block's edges, counting free cells until it hits a wall or another block.</p>
 
-<pre><span class="kw">function</span> <span class="fn">getMovableRange</span>(block: <span class="ty">Block</span>, state: <span class="ty">GameState</span>): { min: <span class="ty">number</span>; max: <span class="ty">number</span> } {
-  <span class="kw">const</span> grid = <span class="fn">buildOccupancy</span>(state)
+    <div class="callout callout-info">
+      <strong>Why does it take both <code>block</code> AND <code>state</code> if <code>state</code> already has <code>blocks[]</code>?</strong>
+      <code>block</code> is the <em>subject</em> — the one specific block we want to move. <code>state</code> is the <em>context</em> — it is passed to <code>buildOccupancy</code> to build a collision map of <em>all other blocks</em>. Without the full state you cannot know what is blocking the subject. The function also accepts an optional third argument <code>prebuiltOccupancy</code>: <code>Grid.tsx</code> pre-builds the occupancy map once with <code>useMemo</code> and passes it in here, avoiding redundant rebuilds during drag and click events.
+    </div>
+
+<pre><span class="kw">function</span> <span class="fn">getMovableRange</span>(
+  block: <span class="ty">Block</span>,
+  state: <span class="ty">GameState</span>,
+  prebuiltOccupancy?: (<span class="ty">string</span> | <span class="ty">null</span>)[][]   <span class="cm">// optional — pass cached map to skip rebuild</span>
+): { min: <span class="ty">number</span>; max: <span class="ty">number</span> } {
+  <span class="kw">const</span> grid = prebuiltOccupancy <span class="op">??</span> <span class="fn">buildOccupancy</span>(state)
   <span class="kw">let</span> min = <span class="num">0</span>, max = <span class="num">0</span>
 
   <span class="kw">if</span> (block.direction === <span class="str">'horizontal'</span>) {
@@ -715,7 +744,17 @@ row 5  [  "vD" ] [  null ] [  "h5" ] [  "h5" ] [  "h5" ] [  null ]</div>
     <p>For example: a vertical block at rows 1–2 in a column with free cells at row 0 (above) and rows 3–4 (below) returns <code>{ min: -1, max: 2 }</code>.</p>
 
     <h3>Step 2 — applyMove()</h3>
-    <p>Once we know the legal range, <code>applyMove</code> clamps the requested delta and creates a <strong>new</strong> state object. It never mutates the old one.</p>
+    <p>Once we know the legal range, <code>applyMove</code> clamps the requested delta and creates a <strong>new</strong> state object. It never mutates the old one. Here is exactly what it does, line by line:</p>
+
+    <ol class="steps">
+      <li><span>Find the block in <code>state.blocks</code> by matching <code>action.blockId</code>. If not found, return the state unchanged.</span></li>
+      <li><span>Call <code>getMovableRange(block, state)</code> → <code>{ min, max }</code>. This tells us how many cells the block can legally slide in the negative direction (<code>min</code>, e.g. −2) and positive direction (<code>max</code>, e.g. +1).</span></li>
+      <li><span>Clamp the user's requested delta: <code>clampedDelta = Math.max(min, Math.min(max, action.delta))</code>. If the player requested a move of +5 but the block can only go +1, <code>clampedDelta</code> becomes 1.</span></li>
+      <li><span>If <code>clampedDelta === 0</code>, nothing moves — return the same state object (no React re-render triggered).</span></li>
+      <li><span>Map over <code>state.blocks</code>: every block is returned as-is <em>except</em> the moved one, which gets <code>row + clampedDelta</code> (vertical) or <code>col + clampedDelta</code> (horizontal).</span></li>
+      <li><span>Check the win condition on the new block positions: target's right edge ≥ grid width.</span></li>
+      <li><span>Return a new <code>GameState</code> object via spread: <code>{ ...state, blocks: newBlocks, moves: state.moves + 1, won }</code>.</span></li>
+    </ol>
 
 <pre><span class="kw">function</span> <span class="fn">applyMove</span>(state: <span class="ty">GameState</span>, action: <span class="ty">MoveAction</span>): <span class="ty">GameState</span> {
   <span class="kw">const</span> block = state.blocks.<span class="fn">find</span>(b => b.id === action.blockId)
@@ -747,6 +786,35 @@ row 5  [  "vD" ] [  null ] [  "h5" ] [  "h5" ] [  "h5" ] [  null ]</div>
       <strong>Clamping is a safety net, not the primary guard</strong>
       The UI already constrains drag and click to legal positions before calling <code>onMove</code>. The clamp inside <code>applyMove</code> is a second line of defence — it makes the engine safe to call from the solver or tests without trusting the caller.
     </div>
+
+    <h3>Where does MoveAction come from?</h3>
+    <p>Three separate input paths in <code>Grid.tsx</code> all produce a <code>MoveAction</code> and hand it to <code>onMove</code>, which dispatches to the reducer:</p>
+
+<div class="diagram">── Drag ──────────────────────────────────────────────────────
+handlePointerUp fires
+  → onMove({ blockId: ds.blockId, delta: ds.currentDelta })
+     delta = cell offset accumulated during drag (already clamped visually)
+
+── Click-to-move ──────────────────────────────────────────────
+handleGridClick converts click pixel → grid cell
+  → delta = clickCol − block.col  (horizontal) or clickRow − block.row  (vertical)
+  → clamped to legal range
+  → onMove({ blockId: selectedBlockId, delta: clamped })
+
+── Arrow keys ─────────────────────────────────────────────────
+handleArrowKey detects ArrowLeft/Right/Up/Down
+  → delta = −1 or +1 (always exactly 1 cell)
+  → onMove({ blockId: selectedBlockId, delta })
+
+── Common path ────────────────────────────────────────────────
+onMove(action)                            ← MoveAction { blockId, delta }
+  dispatch({ type: 'MOVE', action })
+  reducer → applyMove(state, action)
+    getMovableRange → { min, max }
+    clampedDelta = Math.max(min, Math.min(max, action.delta))
+    new GameState returned → React re-render</div>
+
+    <p><code>action.delta</code> in <code>applyMove</code> is the <em>raw</em> delta from the input. The clamp inside <code>applyMove</code> is the authoritative legal bound — the UI clamps too, but the engine never trusts the caller.</p>
   </section>
 
   <!-- ── WIN ───────────────────────────────────────────────────────── -->
