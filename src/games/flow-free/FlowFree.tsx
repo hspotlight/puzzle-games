@@ -1,7 +1,7 @@
 import { useReducer, useState, useEffect, useCallback } from 'react'
 import { LEVELS } from './levels'
 import { applyMove, buildOccupancy, isPathComplete, getNeighbors } from './engine'
-import type { GameState, MoveAction, ColorId, FlowPath } from './types'
+import type { GameState, MoveAction, ColorId } from './types'
 import { Grid, FlowFreePanel, HowToPlay } from './components'
 
 const MIN_CELL = 44
@@ -240,7 +240,7 @@ export function FlowFree() {
 
       {/* Level selector */}
       <div style={{ display: 'flex', justifyContent: 'center', gap: 6, marginBottom: 16, flexWrap: 'wrap' }}>
-        {LEVELS.map((lvl, i) => (
+        {LEVELS.map((_lvl, i) => (
           <button
             key={i}
             onClick={() => dispatch({ type: 'LOAD_LEVEL', index: i })}

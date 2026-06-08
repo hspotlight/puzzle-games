@@ -1,6 +1,6 @@
 import React, { useRef, useCallback, memo } from 'react'
 import type { GameState, ColorId, FlowPath } from '../types'
-import { buildOccupancy, getNeighbors, isPathComplete } from '../engine'
+import { isPathComplete } from '../engine'
 
 const GAP = 4
 const PADDING = 12
@@ -196,7 +196,6 @@ interface GridProps {
 export const Grid = memo(function Grid({
   state,
   cellSize,
-  activeColor,
   onCellPointerDown,
   onCellPointerEnter,
   onPointerUp,
@@ -258,8 +257,6 @@ export const Grid = memo(function Grid({
     }
     onPointerUp()
   }, [onPointerUp])
-
-  const occ = buildOccupancy(state)
 
   // Compute which paths are complete
   const completeSet = new Set(
