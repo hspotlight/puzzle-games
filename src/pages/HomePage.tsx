@@ -30,6 +30,13 @@ const GAMES: GameCard[] = [
     emoji: '🌈',
     available: true,
   },
+  {
+    title: 'Unblock Me — Learn',
+    description: 'Learn BFS & DFS by watching algorithms solve the puzzle. 6 chapters from states to complexity.',
+    path: '/unblock-me-v2',
+    emoji: '🎓',
+    available: true,
+  },
 ]
 
 export function HomePage() {

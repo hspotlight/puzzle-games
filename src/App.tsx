@@ -5,6 +5,7 @@ const HomePage = lazy(() => import('./pages/HomePage').then(m => ({ default: m.H
 const UnblockMe = lazy(() => import('./games/unblock-me/UnblockMe').then(m => ({ default: m.UnblockMe })))
 const SlidingPuzzle = lazy(() => import('./games/sliding-puzzle/SlidingPuzzle').then(m => ({ default: m.SlidingPuzzle })))
 const FlowFree = lazy(() => import('./games/flow-free/FlowFree').then(m => ({ default: m.FlowFree })))
+const UnblockMeV2 = lazy(() => import('./games/unblock-me-v2/UnblockMeV2').then(m => ({ default: m.UnblockMeV2 })))
 
 function Loading() {
   return (
@@ -37,6 +38,9 @@ function NavBar() {
       </Link>
       <Link to="/flow-free" style={{ color: '#bcaaa4', textDecoration: 'none', fontSize: 14 }}>
         Flow Free
+      </Link>
+      <Link to="/unblock-me-v2" style={{ color: '#a5d6a7', textDecoration: 'none', fontSize: 14, fontWeight: 600 }}>
+        🎓 Learn
       </Link>
       <a
         href={`${import.meta.env.BASE_URL}internals-unblock-me.html`}
@@ -77,6 +81,7 @@ export default function App() {
             <Route path="/unblock-me" element={<UnblockMe />} />
             <Route path="/sliding-puzzle" element={<SlidingPuzzle />} />
             <Route path="/flow-free" element={<FlowFree />} />
+            <Route path="/unblock-me-v2" element={<UnblockMeV2 />} />
           </Routes>
         </Suspense>
       </div>
